@@ -26,9 +26,10 @@ def main():
     loss_function = FMOLoss()
 
     if g_finetune:
-        g_load_temp_folder = '/home.stud/rozumden/tmp/PyTorch/20200918_2239_consfm2'
         encoder.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'encoder.pt')))
         rendering.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'rendering.pt')))
+        if g_keep_logs:
+            g_temp_folder = g_load_temp_folder
 
     encoder = nn.DataParallel(encoder).to(device)
     rendering = nn.DataParallel(rendering).to(device)
@@ -60,12 +61,14 @@ def main():
     all_parameters = list(encoder.parameters()) + list(rendering.parameters())
     optimizer = torch.optim.Adam(all_parameters, lr=g_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
+    for _ in range(g_start_epoch):
+        scheduler.step()
     writer = SummaryWriter(log_path)
 
     train_losses = []
     val_losses = []
     best_val_loss = 100.0
-    for epoch in range(g_epochs):
+    for epoch in range(g_start_epoch, g_epochs):
         encoder.train()
         rendering.train()
 

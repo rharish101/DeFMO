@@ -51,6 +51,9 @@ g_use_supervised = True
 g_use_latent_learning = False
 
 g_finetune = False
+g_start_epoch = 0
+g_keep_logs = True
+g_load_temp_folder = run_folder+'20210401_1200_defmotest'
 
 g_lr = 1e-3
 
