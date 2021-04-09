@@ -44,7 +44,7 @@ class ShapeBlurDataset(torch.utils.data.Dataset):
                 hs_frames.append(gt_batch)
             hs_frames = torch.stack(hs_frames,0).contiguous()
         else:
-            hs_frames = gt_paths
+            hs_frames = gt_paths[inds]
 
         if self.do_augment:
             if random.random() > 0.5:
