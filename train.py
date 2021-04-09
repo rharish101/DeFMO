@@ -68,7 +68,7 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
     for _ in range(g_start_epoch):
         scheduler.step()
-    writer = SummaryWriter(log_path)
+    writer = SummaryWriter(log_path, flush_secs=1)
 
     train_losses = []
     val_losses = []
@@ -108,24 +108,39 @@ def main():
 
             jloss = jloss.mean()
             joint_losses.append(jloss.item())    
+
             if it % 50 == 0:
+                global_step = epoch * len(training_generator) + it + 1
+                writer.add_scalar('Loss/train_joint', np.mean(joint_losses), global_step)
                 print("Epoch {:4d}, it {:4d}".format(epoch+1, it), end =" ")
+
                 if g_use_supervised:
+                    writer.add_scalar('Loss/train_supervised', np.mean(supervised_loss), global_step)
                     print(", loss {:.3f}".format(np.mean(supervised_loss)), end =" ")
                 if g_use_selfsupervised_model:
+                    writer.add_scalar('Loss/train_selfsupervised_model', np.mean(model_losses), global_step)
                     print(", model {:.3f}".format(np.mean(model_losses)), end =" ")
                 if g_use_selfsupervised_sharp_mask:
+                    writer.add_scalar('Loss/train_selfsupervised_sharpness', np.mean(sharp_losses), global_step)
                     print(", sharp {:.3f}".format(np.mean(sharp_losses)), end =" ")
                 if g_use_selfsupervised_timeconsistency:
+                    writer.add_scalar('Loss/train_selfsupervised_timeconsistency', np.mean(timecons_losses), global_step)
                     print(", time {:.3f}".format(np.mean(timecons_losses)), end =" ")
                 if g_use_latent_learning:
+                    writer.add_scalar('Loss/train_selfsupervised_latent', np.mean(latent_losses), global_step)
                     print(", latent {:.3f}".format(np.mean(latent_losses)), end =" ")
 
                 print(", joint {:.3f}".format(np.mean(joint_losses)))
+
+                writer.add_scalar('LR/value', optimizer.param_groups[0]['lr'], global_step)
+                writer.add_images('Vis Train Batch', get_images(encoder, rendering, device, vis_train_batch)[0], global_step)
+                writer.add_images('Vis Val Batch', get_images(encoder, rendering, device, vis_val_batch)[0], global_step)
+                writer.flush()
             
             optimizer.zero_grad()
             jloss.backward()
             optimizer.step()
+
         train_losses.append(np.mean(supervised_loss))
 
         with torch.no_grad():
@@ -154,24 +169,12 @@ def main():
                 best_val_loss = val_losses[-1]
                 print('    Saving best validation loss model!  ')
             
-            writer.add_scalar('Loss/train_supervised', train_losses[-1], epoch+1)
-            writer.add_scalar('Loss/train_joint', np.mean(joint_losses), epoch+1)
-            if g_use_selfsupervised_model:
-                writer.add_scalar('Loss/train_selfsupervised_model', np.mean(model_losses), epoch+1)
-            if g_use_selfsupervised_sharp_mask:
-                writer.add_scalar('Loss/train_selfsupervised_sharpness', np.mean(sharp_losses), epoch+1)
-            if g_use_selfsupervised_timeconsistency:
-                writer.add_scalar('Loss/train_selfsupervised_timeconsistency', np.mean(timecons_losses), epoch+1)
-            if g_use_latent_learning:
-                writer.add_scalar('Loss/train_selfsupervised_latent', np.mean(latent_losses), epoch+1)
-            writer.add_scalar('Loss/val_min', val_losses[-1], epoch+1)
-            writer.add_scalar('Loss/val_max', np.mean(running_losses_max), epoch+1)
-            writer.add_scalar('LR/value', optimizer.param_groups[0]['lr'], epoch+1)
-            writer.add_images('Vis Train Batch', get_images(encoder, rendering, device, vis_train_batch)[0], global_step=epoch+1)
-            writer.add_images('Vis Val Batch', get_images(encoder, rendering, device, vis_val_batch)[0], global_step=epoch+1)
-            
+            global_step = (epoch + 1) * len(training_generator)
+            writer.add_scalar('Loss/val_min', val_losses[-1], global_step)
+            writer.add_scalar('Loss/val_max', np.mean(running_losses_max), global_step)
             concat = torch.cat((renders[:,0],renders[:,-1],hs_frames[:,0],hs_frames[:,-1]),2)
-            writer.add_images('Val Batch', concat[:,3:]*(concat[:,:3]-1)+1, global_step=epoch+1)
+            writer.add_images('Val Batch', concat[:,3:]*(concat[:,:3]-1)+1, global_step)
+            writer.flush()
             
         time_elapsed = (time.time() - t0)/60
         print('Epoch {:4d} took {:.2f} minutes, lr = {}, av train loss {:.5f}, val loss min {:.5f} max {:.5f}'.format(epoch+1, time_elapsed, optimizer.param_groups[0]['lr'], train_losses[-1], val_losses[-1], np.mean(running_losses_max)))
