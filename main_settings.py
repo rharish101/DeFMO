@@ -34,6 +34,8 @@ g_epochs = 30
 g_batch_size = 7*3
 g_resolution_x = int(640/2)
 g_resolution_y = int(480/2)
+g_train_res_x = 64 # must be >= 32 and power of 2
+g_train_res_y = 64 # must be >= 32 and power of 2
 g_fmo_steps = 24
 g_fmo_train_steps = 2*12 # must be even
 g_use_median = True

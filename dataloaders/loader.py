@@ -54,6 +54,10 @@ class ShapeBlurDataset(torch.utils.data.Dataset):
                 inputs = torch.flip(inputs, [-2])
                 hs_frames = torch.flip(hs_frames, [-2])
 
+        if g_train_res_x is not None and g_train_res_y is not None:
+            inputs = transforms.functional.resize(inputs, [g_train_res_x, g_train_res_y])
+            hs_frames = transforms.functional.resize(hs_frames, [g_train_res_x, g_train_res_y])
+
         return inputs, times, hs_frames, times_left
 
 
