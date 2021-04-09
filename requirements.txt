@@ -1,0 +1,14 @@
+bpy==2.91a0
+mathutils
+array2gif
+numpy
+opencv-python
+scikit-image
+torch
+torchvision
+h5py
+scipy
+Pillow
+tqdm
+tensorboard
+toml
