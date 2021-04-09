@@ -6,8 +6,9 @@ from main_settings import g_use_selfsupervised_timeconsistency, g_timeconsistenc
 class RenderingCNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.net = self.get_model_resnet()
+        # self.net = self.get_model_resnet()
         # self.net = self.get_model_resnet_smaller()
+        self.net = self.get_model_resnet_tiny()
         self.rgba_operation = nn.Sigmoid()
 
     def get_model_resnet_smaller(self):
@@ -35,6 +36,28 @@ class RenderingCNN(nn.Module):
             last_channels += 2
         model = nn.Sequential(
             nn.Conv2d(2049, 1024, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
+            nn.ReLU(inplace=True),
+            torchvision.models.resnet.Bottleneck(1024,256),
+            nn.PixelShuffle(2),
+            torchvision.models.resnet.Bottleneck(256,64),
+            nn.PixelShuffle(2),
+            torchvision.models.resnet.Bottleneck(64,16),
+            nn.PixelShuffle(2),
+            nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.PixelShuffle(2),
+            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(4, last_channels, kernel_size=3, stride=1, padding=1, bias=True),
+        )
+        return model
+
+    def get_model_resnet_tiny(self):
+        last_channels = 4
+        if g_use_selfsupervised_timeconsistency and g_timeconsistency_type == 'oflow':
+            last_channels += 2
+        model = nn.Sequential(
+            nn.Conv2d(513, 1024, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
             nn.ReLU(inplace=True),
             torchvision.models.resnet.Bottleneck(1024,256),

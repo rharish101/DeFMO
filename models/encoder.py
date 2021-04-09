@@ -5,8 +5,9 @@ class EncoderCNN(nn.Module):
     def __init__(self):
         super(EncoderCNN, self).__init__()
         # self.net = self.get_v1()
-        self.net = self.get_v2()
+        # self.net = self.get_v2()
         # self.net = self.get_v3()
+        self.net = self.get_v4()
 
     def get_v1(self):
         model = torchvision.models.resnet50(pretrained=True)
@@ -38,6 +39,15 @@ class EncoderCNN(nn.Module):
         modelc1[0].weight.data[:, 3:, :, :] = nn.Parameter(pretrained_weights)
         modelc3 = nn.Conv2d(2048, 1024, kernel_size=3, stride=1, padding=1, bias=False)
         modelc = nn.Sequential(modelc1, modelc2, modelc3)
+        return modelc
+
+    def get_v4(self):
+        model = torchvision.models.resnet18(pretrained=True)
+        layers = list(model.children())
+        layer_0 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        layer_0.weight.data[:, :3, :, :] = nn.Parameter(layers[0].weight)
+        layer_0.weight.data[:, 3:, :, :] = nn.Parameter(layers[0].weight)
+        modelc = nn.Sequential(layer_0, *layers[1:3], *layers[4:8])
         return modelc
 
     def forward(self, inputs):
