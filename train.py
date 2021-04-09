@@ -5,6 +5,7 @@ import pdb
 import os
 import torch
 import time
+import toml
 
 from utils import *
 from vis import *
@@ -41,6 +42,10 @@ def main():
     log_path = os.path.join(g_temp_folder,'training')
     if not os.path.exists(log_path):
         os.makedirs(log_path)
+
+    with open(os.path.join(log_path, 'config.toml'), 'w') as f:
+        config = {k: v for k, v in globals().items() if k.startswith('g_')}
+        toml.dump(config, f)
 
     encoder_params = sum(p.numel() for p in encoder.parameters())
     rendering_params = sum(p.numel() for p in rendering.parameters())
