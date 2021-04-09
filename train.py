@@ -177,7 +177,7 @@ def main():
             jloss = jloss.mean()
             joint_losses.append(jloss.item())    
 
-            if it % 50 == 0:
+            if it % 10 == 0:
                 global_step = epoch * len(training_generator) + it + 1
                 writer.add_scalar('Loss/train_joint', np.mean(joint_losses), global_step)
                 print("Epoch {:4d}, it {:4d}".format(epoch+1, it), end =" ")
