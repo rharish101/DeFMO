@@ -60,6 +60,7 @@ g_load_temp_folder = run_folder+'20210401_1200_defmotest'
 g_lr = 1e-3
 g_disc_lr = 1e-5
 g_temp_disc_lr = 5e-5
+g_sched_step_size = 10
 
 g_gan_wt = 1.0
 g_temp_gan_wt = 0.1

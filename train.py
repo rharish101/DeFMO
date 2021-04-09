@@ -89,19 +89,19 @@ def main():
 
     all_parameters = list(encoder.parameters()) + list(rendering.parameters())
     optimizer = torch.optim.Adam(all_parameters, lr=g_lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=g_sched_step_size, gamma=0.5)
     for _ in range(g_start_epoch):
         scheduler.step()
     writer = SummaryWriter(log_path, flush_secs=1)
 
     if g_use_gan_loss:
         disc_optimizer = torch.optim.Adam(discriminator.parameters(), lr=g_disc_lr)
-        disc_scheduler = torch.optim.lr_scheduler.StepLR(disc_optimizer, step_size=1000, gamma=0.5)
+        disc_scheduler = torch.optim.lr_scheduler.StepLR(disc_optimizer, step_size=g_sched_step_size, gamma=0.5)
         for _ in range(g_start_epoch):
             disc_scheduler.step()
     if g_use_gan_timeconsistency:
         temp_disc_optimizer = torch.optim.Adam(temp_disc.parameters(), lr=g_temp_disc_lr)
-        temp_disc_scheduler = torch.optim.lr_scheduler.StepLR(temp_disc_optimizer, step_size=1000, gamma=0.5)
+        temp_disc_scheduler = torch.optim.lr_scheduler.StepLR(temp_disc_optimizer, step_size=g_sched_step_size, gamma=0.5)
         for _ in range(g_start_epoch):
             temp_disc_scheduler.step()
 
