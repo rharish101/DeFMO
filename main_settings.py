@@ -45,10 +45,11 @@ g_sharp_mask_type = 'entropy'
 g_timeconsistency_type = 'ncc' # oflow, ncc
 
 g_use_selfsupervised_model = True
-g_use_selfsupervised_sharp_mask = True
+g_use_selfsupervised_sharp_mask = False
 g_use_selfsupervised_timeconsistency = True
 g_use_supervised = True
 g_use_latent_learning = False
+g_use_gan_loss = True
 
 g_finetune = False
 g_start_epoch = 0
@@ -56,6 +57,10 @@ g_keep_logs = True
 g_load_temp_folder = run_folder+'20210401_1200_defmotest'
 
 g_lr = 1e-3
+g_disc_lr = 1e-5
+
+g_gan_wt = 1.0
+g_disc_steps = 1
 
 ## for speed-up and memory
 g_num_workers = 6

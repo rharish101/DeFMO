@@ -14,7 +14,7 @@ class FMOLoss(nn.Module):
         renders_supervised = renders[:,:g_fmo_train_steps]
         renders_supervised_all = renders_all[:,:g_fmo_train_steps]
 
-        supervised_loss = 0
+        supervised_loss = torch.tensor(0.0)
         if g_use_supervised:
             loss1 = fmo_loss(renders_supervised, hs_frames)
             loss2 = fmo_loss(renders_supervised, torch.flip(hs_frames,[1]))
@@ -164,3 +164,44 @@ def temporal_consistency_loss(renders):
     # nccs = 1-normalized_cross_correlation(renders[:,:-1,-1], renders[:,1:,-1])
     nccs = 1-normalized_cross_correlation_channels(renders[:,:-1], renders[:,1:])
     return nccs.mean(1)
+
+def gan_loss(generated, real, discriminator):
+    real_out = discriminator(real)
+    fake_out = discriminator(generated)
+
+    gen_loss = real_out - fake_out
+    disc_loss = -gen_loss
+
+    return gen_loss, disc_loss
+
+class GANLoss(nn.Module):
+    def __init__(self, reduction='none'):
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(self, renders, hs_frames, discriminator):
+        assert renders.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
+        renders = renders[:,:g_fmo_train_steps,:4]
+
+        gen_loss1, gen_loss2 = 0, 0
+        disc_loss1, disc_loss2 = 0, 0
+
+        for frame_num in range(g_fmo_train_steps):
+            losses1 = gan_loss(renders[:, frame_num], hs_frames[:, frame_num], discriminator)
+            gen_loss1 += losses1[0]
+            disc_loss1 += losses1[1]
+
+            losses2 = gan_loss(renders[:, frame_num], hs_frames[:, g_fmo_train_steps - 1 - frame_num], discriminator)
+            gen_loss2 += losses2[0]
+            disc_loss2 += losses2[1]
+
+        gen_loss_combined = torch.stack([gen_loss1, gen_loss2])
+        disc_loss_combined = torch.stack([disc_loss1, disc_loss2])
+        indices = gen_loss_combined.argmin(0).unsqueeze(0)
+        gen_loss = gen_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
+        disc_loss = disc_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
+
+        if self.reduction == 'none':
+            return gen_loss, disc_loss
+        else:
+            raise Exception('Unexpected reduction {}'.format(self.reduction))
