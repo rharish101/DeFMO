@@ -13,7 +13,7 @@ from main_settings import *
 
 from models.encoder import *
 from models.rendering import *
-from models.discriminator import Discriminator
+from models.discriminator import Discriminator, TemporalDiscriminator
 from models.loss import *
 from dataloaders.loader import *
 from dataloaders.val_loaders import *
@@ -29,12 +29,16 @@ def main():
 
     if g_use_gan_loss:
         discriminator = Discriminator()
+    if g_use_gan_timeconsistency:
+        temp_disc = TemporalDiscriminator()
 
     if g_finetune:
         encoder.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'encoder.pt')))
         rendering.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'rendering.pt')))
         if g_use_gan_loss:
             discriminator.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'discriminator.pt')))
+        if g_use_gan_timeconsistency:
+            temp_disc.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'temp_disc.pt')))
         if g_keep_logs:
             g_temp_folder = g_load_temp_folder
 
@@ -44,6 +48,9 @@ def main():
     if g_use_gan_loss:
         discriminator = nn.DataParallel(discriminator).to(device)
         gan_loss_function = GANLoss()
+    if g_use_gan_timeconsistency:
+        temp_disc = nn.DataParallel(temp_disc).to(device)
+        temp_gan_function = TemporalGANLoss()
 
     if not os.path.exists(g_temp_folder):
         os.makedirs(g_temp_folder)
@@ -65,6 +72,9 @@ def main():
     if g_use_gan_loss:
         disc_params = sum(p.numel() for p in discriminator.parameters())
         print(', discriminator params {:2f}M'.format(disc_params/1e6), end='')
+    if g_use_gan_timeconsistency:
+        temp_disc_params = sum(p.numel() for p in temp_disc.parameters())
+        print(', temporal discriminator params {:2f}M'.format(temp_disc_params/1e6), end='')
     print('')
     
     training_set = ShapeBlurDataset(dataset_folder=g_dataset_folder, render_objs = g_render_objs, number_per_category=g_number_per_category,do_augment=True,use_latent_learning=g_use_latent_learning)
@@ -89,6 +99,11 @@ def main():
         disc_scheduler = torch.optim.lr_scheduler.StepLR(disc_optimizer, step_size=1000, gamma=0.5)
         for _ in range(g_start_epoch):
             disc_scheduler.step()
+    if g_use_gan_timeconsistency:
+        temp_disc_optimizer = torch.optim.Adam(temp_disc.parameters(), lr=g_temp_disc_lr)
+        temp_disc_scheduler = torch.optim.lr_scheduler.StepLR(temp_disc_optimizer, step_size=1000, gamma=0.5)
+        for _ in range(g_start_epoch):
+            temp_disc_scheduler.step()
 
     train_losses = []
     val_losses = []
@@ -98,6 +113,8 @@ def main():
         rendering.train()
         if g_use_gan_loss:
             discriminator.train()
+        if g_use_gan_timeconsistency:
+            temp_disc.train()
 
         t0 = time.time()
         supervised_loss = []
@@ -108,6 +125,9 @@ def main():
         if g_use_gan_loss:
             gen_losses = []
             disc_losses = []
+        if g_use_gan_timeconsistency:
+            temp_gen_losses = []
+            temp_disc_losses = []
         joint_losses = []
         for it, (input_batch, times, hs_frames, times_left) in enumerate(training_generator):
             input_batch, times, hs_frames, times_left = input_batch.to(device), times.to(device), hs_frames.to(device), times_left.to(device)
@@ -132,6 +152,16 @@ def main():
                 gen_loss, disc_loss = gan_loss_function(renders, hs_frames, discriminator)
                 jloss += g_gan_wt * gen_loss
 
+            if g_use_gan_timeconsistency:
+                for _ in range(g_temp_disc_steps):
+                    temp_disc_optimizer.zero_grad()
+                    temp_disc_loss = temp_gan_function(renders.detach(), temp_disc)[1]
+                    temp_disc_loss.mean().backward()
+                    temp_disc_optimizer.step()
+
+                temp_gen_loss, temp_disc_loss = temp_gan_function(renders, temp_disc)
+                jloss += g_temp_gan_wt * temp_gen_loss
+
             supervised_loss.append(sloss.mean().item())
             model_losses.append(mloss.mean().item())
             sharp_losses.append(shloss.mean().item())
@@ -140,6 +170,9 @@ def main():
             if g_use_gan_loss:
                 gen_losses.append(gen_loss.mean().item())
                 disc_losses.append(disc_loss.mean().item())
+            if g_use_gan_timeconsistency:
+                temp_gen_losses.append(temp_gen_loss.mean().item())
+                temp_disc_losses.append(temp_disc_loss.mean().item())
 
             jloss = jloss.mean()
             joint_losses.append(jloss.item())    
@@ -169,6 +202,11 @@ def main():
                     writer.add_scalar('Loss/train_gan_discriminator', np.mean(disc_losses), global_step)
                     print(", gen {:.3f}".format(np.mean(gen_losses)), end =" ")
                     print(", disc {:.3f}".format(np.mean(disc_losses)), end =" ")
+                if g_use_gan_timeconsistency:
+                    writer.add_scalar('Loss/train_temp_gan_generator', np.mean(temp_gen_losses), global_step)
+                    writer.add_scalar('Loss/train_temp_gan_discriminator', np.mean(temp_disc_losses), global_step)
+                    print(", temp_gen {:.3f}".format(np.mean(temp_gen_losses)), end =" ")
+                    print(", temp_disc {:.3f}".format(np.mean(temp_disc_losses)), end =" ")
 
                 print(", joint {:.3f}".format(np.mean(joint_losses)))
 
@@ -188,6 +226,8 @@ def main():
             rendering.eval()
             if g_use_gan_loss:
                 discriminator.eval()
+            if g_use_gan_timeconsistency:
+                temp_disc.eval()
             
             running_losses_min = []
             running_losses_max = []
@@ -210,6 +250,8 @@ def main():
                 torch.save(rendering.module.state_dict(), os.path.join(g_temp_folder, 'rendering_best.pt'))
                 if g_use_gan_loss:
                     torch.save(discriminator.module.state_dict(), os.path.join(g_temp_folder, 'discriminator_best.pt'))
+                if g_use_gan_timeconsistency:
+                    torch.save(temp_disc.module.state_dict(), os.path.join(g_temp_folder, 'temp_disc_best.pt'))
                 best_val_loss = val_losses[-1]
                 print('    Saving best validation loss model!  ')
             
@@ -225,6 +267,8 @@ def main():
         scheduler.step()
         if g_use_gan_loss:
             disc_scheduler.step()
+        if g_use_gan_timeconsistency:
+            temp_disc_scheduler.step()
         
     # pdb.set_trace()
     torch.cuda.empty_cache()
@@ -232,6 +276,8 @@ def main():
     torch.save(rendering.module.state_dict(), os.path.join(g_temp_folder, 'rendering.pt'))
     if g_use_gan_loss:
         torch.save(discriminator.module.state_dict(), os.path.join(g_temp_folder, 'discriminator.pt'))
+    if g_use_gan_timeconsistency:
+        torch.save(temp_disc.module.state_dict(), os.path.join(g_temp_folder, 'temp_disc.pt'))
     writer.close()
 
 if __name__ == "__main__":

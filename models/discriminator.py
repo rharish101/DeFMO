@@ -30,3 +30,28 @@ class Discriminator(nn.Module):
     def forward(self, inputs):
         noise = torch.randn_like(inputs) * 1e-3
         return self.net(inputs + noise).flatten()
+
+
+class TemporalDiscriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        model = resnet18(pretrained=True)
+        layers = list(model.children())
+
+        pretrained_weights = layers[0].weight
+        layers[0] = nn.Conv2d(8, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        layers[0].weight.data[:, :3, :, :] = nn.Parameter(pretrained_weights)
+        layers[0].weight.data[:, 4:7, :, :] = nn.Parameter(pretrained_weights)
+
+        combine = nn.Sequential(
+            nn.Conv2d(512, 1, kernel_size=(1, 1), bias=False),
+            nn.BatchNorm2d(1),
+            nn.ReLU(inplace=True),
+        )
+
+        net = nn.Sequential(*layers[:-2], combine, layers[-2])
+        self.net = spectralize(net)
+
+    def forward(self, inputs):
+        return self.net(inputs).flatten()

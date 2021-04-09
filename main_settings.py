@@ -50,6 +50,7 @@ g_use_selfsupervised_timeconsistency = True
 g_use_supervised = True
 g_use_latent_learning = False
 g_use_gan_loss = True
+g_use_gan_timeconsistency = False
 
 g_finetune = False
 g_start_epoch = 0
@@ -58,9 +59,12 @@ g_load_temp_folder = run_folder+'20210401_1200_defmotest'
 
 g_lr = 1e-3
 g_disc_lr = 1e-5
+g_temp_disc_lr = 5e-5
 
 g_gan_wt = 1.0
+g_temp_gan_wt = 0.1
 g_disc_steps = 1
+g_temp_disc_steps = 1
 
 ## for speed-up and memory
 g_num_workers = 6

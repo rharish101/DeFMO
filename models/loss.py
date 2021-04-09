@@ -1,3 +1,4 @@
+import random
 import torch.nn as nn
 import torch
 from helpers.torch_helpers import *
@@ -200,6 +201,34 @@ class GANLoss(nn.Module):
         indices = gen_loss_combined.argmin(0).unsqueeze(0)
         gen_loss = gen_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
         disc_loss = disc_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
+
+        if self.reduction == 'none':
+            return gen_loss, disc_loss
+        else:
+            raise Exception('Unexpected reduction {}'.format(self.reduction))
+
+class TemporalGANLoss(nn.Module):
+    def __init__(self, reduction='none'):
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(self, renders, discriminator):
+        renders = renders[:,:g_fmo_train_steps,:4]
+
+        gen_loss = 0
+        disc_loss = 0
+
+        for frame_num in range(g_fmo_train_steps - 1):
+            # Offset from the current index
+            offset = random.choice(range(2, g_fmo_train_steps))
+            choice = (frame_num + offset) % g_fmo_train_steps
+
+            correct = torch.cat((renders[:, frame_num], renders[:, frame_num + 1]), 1)
+            incorrect = torch.cat((renders[:, frame_num], renders[:, choice]), 1)
+
+            losses = gan_loss(incorrect, correct, discriminator)
+            gen_loss += losses[0]
+            disc_loss += losses[1]
 
         if self.reduction == 'none':
             return gen_loss, disc_loss
