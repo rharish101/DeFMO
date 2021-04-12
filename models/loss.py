@@ -184,23 +184,15 @@ class GANLoss(nn.Module):
         assert renders.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
         renders = renders[:,:g_fmo_train_steps,:4]
 
-        gen_loss1, gen_loss2 = 0, 0
-        disc_loss1, disc_loss2 = 0, 0
+        gen_loss, disc_loss = 0, 0
 
         for frame_num in range(g_fmo_train_steps):
-            losses1 = gan_loss(renders[:, frame_num], hs_frames[:, frame_num], discriminator)
-            gen_loss1 += losses1[0]
-            disc_loss1 += losses1[1]
+            losses = gan_loss(renders[:, frame_num], hs_frames[:, frame_num], discriminator)
+            gen_loss += losses[0]
+            disc_loss += losses[1]
 
-            losses2 = gan_loss(renders[:, frame_num], hs_frames[:, g_fmo_train_steps - 1 - frame_num], discriminator)
-            gen_loss2 += losses2[0]
-            disc_loss2 += losses2[1]
-
-        gen_loss_combined = torch.stack([gen_loss1, gen_loss2])
-        disc_loss_combined = torch.stack([disc_loss1, disc_loss2])
-        indices = gen_loss_combined.argmin(0).unsqueeze(0)
-        gen_loss = gen_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
-        disc_loss = disc_loss_combined.gather(0, indices).squeeze(0) / g_fmo_train_steps
+        gen_loss = gen_loss / g_fmo_train_steps
+        disc_loss = disc_loss / g_fmo_train_steps
 
         if self.reduction == 'none':
             return gen_loss, disc_loss
