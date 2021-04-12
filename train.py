@@ -32,6 +32,7 @@ def main():
     if g_use_gan_timeconsistency:
         temp_disc = TemporalDiscriminator()
 
+    l_temp_folder = g_temp_folder
     if g_finetune:
         encoder.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'encoder.pt')))
         rendering.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'rendering.pt')))
@@ -40,7 +41,7 @@ def main():
         if g_use_gan_timeconsistency:
             temp_disc.load_state_dict(torch.load(os.path.join(g_load_temp_folder, 'temp_disc.pt')))
         if g_keep_logs:
-            g_temp_folder = g_load_temp_folder
+            l_temp_folder = g_load_temp_folder
 
     encoder = nn.DataParallel(encoder).to(device)
     rendering = nn.DataParallel(rendering).to(device)
@@ -52,10 +53,10 @@ def main():
         temp_disc = nn.DataParallel(temp_disc).to(device)
         temp_gan_function = TemporalGANLoss()
 
-    if not os.path.exists(g_temp_folder):
-        os.makedirs(g_temp_folder)
+    if not os.path.exists(l_temp_folder):
+        os.makedirs(l_temp_folder)
 
-    log_path = os.path.join(g_temp_folder,'training')
+    log_path = os.path.join(l_temp_folder,'training')
     if not os.path.exists(log_path):
         os.makedirs(log_path)
 
@@ -246,12 +247,12 @@ def main():
             print("Epoch {:4d}, val it {:4d}, loss {}".format(epoch+1, it, np.mean(running_losses_min)))
             val_losses.append(np.mean(running_losses_min))
             if val_losses[-1] < best_val_loss and epoch >= 0:
-                torch.save(encoder.module.state_dict(), os.path.join(g_temp_folder, 'encoder_best.pt'))
-                torch.save(rendering.module.state_dict(), os.path.join(g_temp_folder, 'rendering_best.pt'))
+                torch.save(encoder.module.state_dict(), os.path.join(l_temp_folder, 'encoder_best.pt'))
+                torch.save(rendering.module.state_dict(), os.path.join(l_temp_folder, 'rendering_best.pt'))
                 if g_use_gan_loss:
-                    torch.save(discriminator.module.state_dict(), os.path.join(g_temp_folder, 'discriminator_best.pt'))
+                    torch.save(discriminator.module.state_dict(), os.path.join(l_temp_folder, 'discriminator_best.pt'))
                 if g_use_gan_timeconsistency:
-                    torch.save(temp_disc.module.state_dict(), os.path.join(g_temp_folder, 'temp_disc_best.pt'))
+                    torch.save(temp_disc.module.state_dict(), os.path.join(l_temp_folder, 'temp_disc_best.pt'))
                 best_val_loss = val_losses[-1]
                 print('    Saving best validation loss model!  ')
             
@@ -272,12 +273,12 @@ def main():
         
     # pdb.set_trace()
     torch.cuda.empty_cache()
-    torch.save(encoder.module.state_dict(), os.path.join(g_temp_folder, 'encoder.pt'))
-    torch.save(rendering.module.state_dict(), os.path.join(g_temp_folder, 'rendering.pt'))
+    torch.save(encoder.module.state_dict(), os.path.join(l_temp_folder, 'encoder.pt'))
+    torch.save(rendering.module.state_dict(), os.path.join(l_temp_folder, 'rendering.pt'))
     if g_use_gan_loss:
-        torch.save(discriminator.module.state_dict(), os.path.join(g_temp_folder, 'discriminator.pt'))
+        torch.save(discriminator.module.state_dict(), os.path.join(l_temp_folder, 'discriminator.pt'))
     if g_use_gan_timeconsistency:
-        torch.save(temp_disc.module.state_dict(), os.path.join(g_temp_folder, 'temp_disc.pt'))
+        torch.save(temp_disc.module.state_dict(), os.path.join(l_temp_folder, 'temp_disc.pt'))
     writer.close()
 
 if __name__ == "__main__":
