@@ -2,17 +2,24 @@ import torch
 from dataloaders.reporters import *
 from dataloaders.loader import *
 from dataloaders.tbd_loader import *
-from main_settings import *
 from utils import *
 from scipy.ndimage.morphology import binary_dilation
 import os
 import sys
 import pdb
 
-def get_figure_images(encoder, rendering, device, mode, seqi, frmi, results_mode = False, n_occ=2):
+def get_figure_images(dataset_folder, encoder, rendering, device, mode, seqi, frmi, results_mode = False, n_occ=2):
     log_folder = './output/'
     if not os.path.exists(log_folder):
         os.makedirs(log_folder)
+
+    tbd_folder = str(dataset_folder / "TbD_GC/")
+    tbd3d_folder = str(dataset_folder / "TbD-3D/")
+    falling_folder = str(dataset_folder / "falling_objects/")
+    wildfmo_folder = str(dataset_folder / "wildfmo/")
+    youtube_folder = str(dataset_folder / "youtube/")
+    train_folder = str(dataset_folder / "ShapeNetv2/ShapeBlur1000STL.hdf5")
+    validation_folder = str(dataset_folder / "ShapeNetv2/ShapeBlur20STL.hdf5")
 
     medn = 7
     gamma_c = 1 # 0.7
@@ -32,33 +39,33 @@ def get_figure_images(encoder, rendering, device, mode, seqi, frmi, results_mode
         from helpers.deblurgan_runner import run_deblurgan
         
     if mode == 'tbd':
-        files = get_tbd_dataset()
-        folder = g_tbd_folder
+        files = get_tbd_dataset(tbd_folder)
+        folder = tbd_folder
     elif mode == 'tbd3d':
-        files = get_tbd3d_dataset()
-        folder = g_tbd3d_folder
+        files = get_tbd3d_dataset(tbd3d_folder)
+        folder = tbd3d_folder
         medn = 50
     elif mode == 'tbdfalling':
-        files = get_falling_dataset()
-        folder = g_falling_folder
+        files = get_falling_dataset(falling_folder)
+        folder = falling_folder
         medn = 50
         ext_factor = 4
     elif mode == 'wildfmo':
-        files = get_wildfmo_dataset()
-        folder = g_wildfmo_folder
+        files = get_wildfmo_dataset(wildfmo_folder)
+        folder = wildfmo_folder
         medn = 50
         ext_factor = 1
     elif mode == 'train':
-        files = g_render_objs_train
-        folder = g_dataset_folder
+        files = config.render_objs_train
+        folder = train_folder
         ext_factor = 1
     elif mode == 'val':
-        files = g_render_objs_train
-        folder = g_validation_folder
+        files = config.render_objs_train
+        folder = validation_folder
         ext_factor = 1
     elif mode == 'youtube':
-        files = get_youtube_dataset()
-        folder = g_youtube_folder
+        files = get_youtube_dataset(youtube_folder)
+        folder = youtube_folder
         ext_factor = 4
         medn = 9
     else:
@@ -108,10 +115,10 @@ def get_figure_images(encoder, rendering, device, mode, seqi, frmi, results_mode
             else:
                 bbox_tight = extend_bbox_uniform(bbox_tight.copy(),3,I.shape)
 
-            bbox = extend_bbox(bbox_tight.copy(),ext_factor*np.max(radius),g_resolution_y/g_resolution_x,I.shape)
+            bbox = extend_bbox(bbox_tight.copy(),ext_factor*np.max(radius),config.resolution_y/config.resolution_x,I.shape)
             
-            im_crop = crop_resize(I, bbox, (g_resolution_x, g_resolution_y))
-            bgr_crop = crop_resize(B, bbox, (g_resolution_x, g_resolution_y))
+            im_crop = crop_resize(I, bbox, (config.resolution_x, config.resolution_y))
+            bgr_crop = crop_resize(B, bbox, (config.resolution_x, config.resolution_y))
 
             eps = 0
             preprocess = get_transform()
@@ -136,7 +143,7 @@ def get_figure_images(encoder, rendering, device, mode, seqi, frmi, results_mode
                 est_traj = renders2traj(renders,device)[0].T.cpu()
             else:
                 est_traj = renders2traj_bbox(renders_rgba)
-            est_traj = rev_crop_resize_traj(est_traj, bbox, (g_resolution_x, g_resolution_y))
+            est_traj = rev_crop_resize_traj(est_traj, bbox, (config.resolution_x, config.resolution_y))
 
             if do_deblatting or do_tbdo:
                 if gtp.syn_mode:
@@ -185,7 +192,7 @@ def get_figure_images(encoder, rendering, device, mode, seqi, frmi, results_mode
                 iou = seq_score_tracker.next_traj(kk,gt_traj,est_traj,radius)
 
             if gtp.use_hs:
-                gt_hs_crop = crop_resize(gt_hs[:,:,:3], bbox, (g_resolution_x, g_resolution_y))
+                gt_hs_crop = crop_resize(gt_hs[:,:,:3], bbox, (config.resolution_x, config.resolution_y))
                 est_hs_crop, do_flip = sync_directions(est_hs_crop, gt_hs_crop)
             else:
                 est_hs_crop, est_traj, do_flip = sync_directions_smooth(est_hs_crop, est_traj, est_traj_prev, radius)

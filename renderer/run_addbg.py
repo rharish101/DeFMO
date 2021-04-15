@@ -2,7 +2,6 @@ import h5py
 import os, glob
 import numpy as np
 
-from main_settings import *
 from renderer.settings import *
 from utils import *
 from PIL import Image

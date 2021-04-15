@@ -2,55 +2,55 @@ import random
 import torch.nn as nn
 import torch
 from helpers.torch_helpers import *
-from main_settings import *
 
 class FMOLoss(nn.Module):
-    def __init__(self, reduction='none'):
+    def __init__(self, config, reduction='none'):
         super(FMOLoss, self).__init__()
+        self.config = config
         self.reduction = reduction
 
     def forward(self, renders_all, hs_frames, input_batch, latents=None):
         assert renders_all.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
         renders = renders_all[:,:,:4]
-        renders_supervised = renders[:,:g_fmo_train_steps]
-        renders_supervised_all = renders_all[:,:g_fmo_train_steps]
+        renders_supervised = renders[:,:self.config.fmo_train_steps]
+        renders_supervised_all = renders_all[:,:self.config.fmo_train_steps]
 
         supervised_loss = torch.tensor(0.0)
-        if g_use_supervised:
+        if self.config.use_supervised:
             loss1 = fmo_loss(renders_supervised, hs_frames)
             loss2 = fmo_loss(renders_supervised, torch.flip(hs_frames,[1]))
             supervised_loss,_ = torch.cat((loss1.unsqueeze(0),loss2.unsqueeze(0)),0).min(0)
 
         loss_timecons = 0*supervised_loss
-        if g_use_selfsupervised_timeconsistency:
-            if g_timeconsistency_type == 'oflow':
+        if self.config.use_selfsupervised_timeconsistency:
+            if self.config.timeconsistency_type == 'oflow':
                 loss_timecons = 10*oflow_loss(renders_supervised_all)
             else:
                 loss_timecons = 5*temporal_consistency_loss(renders_supervised)
 
-        if not g_use_supervised:
+        if not self.config.use_supervised:
             supervised_loss = 0*loss_timecons
 
         model_loss = 0*supervised_loss
-        if g_use_selfsupervised_model:
+        if self.config.use_selfsupervised_model:
             modelled_renders = torch.cat( (renders[:,:,:3]*renders[:,:,3:], renders[:,:,3:]), 2).mean(1)
 
             region_of_interest = None
-            if g_use_supervised:
+            if self.config.use_supervised:
                 region_of_interest = hs_frames[:,:,3:].mean(1) > 0
             
             model_loss = fmo_model_loss(input_batch, modelled_renders, Mask = region_of_interest)
         
         loss_sharp_mask = 0*supervised_loss
-        if g_use_selfsupervised_sharp_mask:
-            if g_sharp_mask_type == 'entropy':
+        if self.config.use_selfsupervised_sharp_mask:
+            if self.config.sharp_mask_type == 'entropy':
                 loss_sharp_mask = mask_sharp_loss_entropy_batchsum(renders) ## / 4 for similar scale as x*(1-x)
             else:
                 loss_sharp_mask = mask_sharp_loss_batchsum(renders)
-            loss_sharp_mask /= g_fmo_steps
+            loss_sharp_mask /= self.config.fmo_steps
 
         loss_latent = 0*supervised_loss
-        if g_use_latent_learning:
+        if self.config.use_latent_learning:
             # normalization = nn.MSELoss(reduction='none')(latents[0],torch.flip(latents[1],[0])).mean([1,2,3]).max()
             loss_latent = nn.MSELoss(reduction='none')(latents[0],latents[1]).mean([1,2,3]) # / normalization
 
@@ -62,7 +62,7 @@ class FMOLoss(nn.Module):
             raise Exception('Unexpected reduction {}'.format(self.reduction))
 
 def oflow_loss(renders):
-    time_inc = 1/(g_fmo_steps-1)
+    time_inc = 1/(renders.shape[1]-1)
     imgs1 = renders[:,:-1,:4]
     flows = time_inc*renders[:,:-1,4:]
     imgs2 = renders[:,1:,:4]
@@ -176,23 +176,24 @@ def gan_loss(generated, real, discriminator):
     return gen_loss, disc_loss
 
 class GANLoss(nn.Module):
-    def __init__(self, reduction='none'):
+    def __init__(self, config, reduction='none'):
         super().__init__()
+        self.config = config
         self.reduction = reduction
 
     def forward(self, renders, hs_frames, discriminator):
         assert renders.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
-        renders = renders[:,:g_fmo_train_steps,:4]
+        renders = renders[:,:self.config.fmo_train_steps,:4]
 
         gen_loss, disc_loss = 0, 0
 
-        for frame_num in range(g_fmo_train_steps):
+        for frame_num in range(self.config.fmo_train_steps):
             losses = gan_loss(renders[:, frame_num], hs_frames[:, frame_num], discriminator)
             gen_loss += losses[0]
             disc_loss += losses[1]
 
-        gen_loss = gen_loss / g_fmo_train_steps
-        disc_loss = disc_loss / g_fmo_train_steps
+        gen_loss = gen_loss / self.config.fmo_train_steps
+        disc_loss = disc_loss / self.config.fmo_train_steps
 
         if self.reduction == 'none':
             return gen_loss, disc_loss
@@ -200,20 +201,21 @@ class GANLoss(nn.Module):
             raise Exception('Unexpected reduction {}'.format(self.reduction))
 
 class TemporalGANLoss(nn.Module):
-    def __init__(self, reduction='none'):
+    def __init__(self, config, reduction='none'):
         super().__init__()
+        self.config = config
         self.reduction = reduction
 
     def forward(self, renders, discriminator):
-        renders = renders[:,:g_fmo_train_steps,:4]
+        renders = renders[:,:self.config.fmo_train_steps,:4]
 
         gen_loss = 0
         disc_loss = 0
 
-        for frame_num in range(g_fmo_train_steps - 1):
+        for frame_num in range(self.config.fmo_train_steps - 1):
             # Offset from the current index
-            offset = random.choice(range(2, g_fmo_train_steps))
-            choice = (frame_num + offset) % g_fmo_train_steps
+            offset = random.choice(range(2, self.config.fmo_train_steps))
+            choice = (frame_num + offset) % self.config.fmo_train_steps
 
             correct = torch.cat((renders[:, frame_num], renders[:, frame_num + 1]), 1)
             incorrect = torch.cat((renders[:, frame_num], renders[:, choice]), 1)
@@ -222,8 +224,8 @@ class TemporalGANLoss(nn.Module):
             gen_loss += losses[0]
             disc_loss += losses[1]
 
-        gen_loss = gen_loss / g_fmo_train_steps
-        disc_loss = disc_loss / g_fmo_train_steps
+        gen_loss = gen_loss / self.config.fmo_train_steps
+        disc_loss = disc_loss / self.config.fmo_train_steps
 
         if self.reduction == 'none':
             return gen_loss, disc_loss

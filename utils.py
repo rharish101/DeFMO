@@ -3,7 +3,6 @@ import math
 
 # from deblatting_python.gpu.deblatting_gpu import *
 # from deblatting_python.deblatting_pw import *
-from main_settings import *
 
 from skimage.draw import line_aa
 from skimage import measure
@@ -127,7 +126,7 @@ def imread(name):
 	else:
 		return img[:,:,[2,1,0,3]]/65535
 
-def imwrite(im, name = tmp_folder + 'tmp.png'):
+def imwrite(im, name):
 	im[im<0]=0
 	im[im>1]=1
 	cv2.imwrite(name, im[:,:,[2,1,0]]*255)

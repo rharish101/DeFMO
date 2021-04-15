@@ -5,7 +5,6 @@ from skimage.measure import label, regionprops
 import os
 import cv2
 import numpy as np
-from main_settings import *
 import matplotlib.pyplot as plt
 from PIL import Image
 import pdb
@@ -76,7 +75,7 @@ def renders2traj_bbox(renders_rgba):
 	est_traj = np.reshape(est_traj, (-1,2)).T
 	return est_traj
 	
-def write_latent(rendering, latent, device, folder=g_temp_folder,steps=g_fmo_steps,videoname='output.avi'):
+def write_latent(rendering, latent, device, folder,steps,videoname='output.avi'):
 	write_video = True
 	write_images = False
 	eps = 0
@@ -99,7 +98,7 @@ def write_latent(rendering, latent, device, folder=g_temp_folder,steps=g_fmo_ste
 
 	return renders
 
-def write_gt(gt_paths, folder=g_temp_folder, bgr_clr = 1):
+def write_gt(gt_paths, folder, bgr_clr = 1):
 	write_video = True
 	out = None
 	renders = []
@@ -115,7 +114,7 @@ def write_gt(gt_paths, folder=g_temp_folder, bgr_clr = 1):
 	renders = torch.from_numpy(renders).float().permute(0,1,4,2,3)
 	return renders	 
 
-def write_gt_masks(gt_paths, folder=g_temp_folder, bgr_clr = 1):
+def write_gt_masks(gt_paths, folder, bgr_clr = 1):
 	write_video = True
 	out = None
 	renders = []

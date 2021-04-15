@@ -2,3 +2,4 @@
 lsf.*
 output/*
 saved_models/*
+configs/*

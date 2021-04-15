@@ -1,17 +1,17 @@
 import torch
 import torch.nn as nn
 import torchvision.models
-from main_settings import g_use_selfsupervised_timeconsistency, g_timeconsistency_type
 
 class RenderingCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, config):
         super().__init__()
-        # self.net = self.get_model_resnet()
-        # self.net = self.get_model_resnet_smaller()
-        self.net = self.get_model_resnet_tiny()
+        # self.net = self.get_model_resnet(config)
+        # self.net = self.get_model_resnet_smaller(config)
+        self.net = self.get_model_resnet_tiny(config)
         self.rgba_operation = nn.Sigmoid()
 
-    def get_model_resnet_smaller(self):
+    @staticmethod
+    def get_model_resnet_smaller():
         model = nn.Sequential(
             nn.Conv2d(1025, 1024, kernel_size=3, stride=1, padding=1, bias=False),
             nn.ReLU(inplace=True),
@@ -30,9 +30,10 @@ class RenderingCNN(nn.Module):
         )
         return model
 
-    def get_model_resnet(self):
+    @staticmethod
+    def get_model_resnet(config):
         last_channels = 4
-        if g_use_selfsupervised_timeconsistency and g_timeconsistency_type == 'oflow':
+        if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
             last_channels += 2
         model = nn.Sequential(
             nn.Conv2d(2049, 1024, kernel_size=3, stride=1, padding=1, bias=False),
@@ -52,9 +53,10 @@ class RenderingCNN(nn.Module):
         )
         return model
 
-    def get_model_resnet_tiny(self):
+    @staticmethod
+    def get_model_resnet_tiny(config):
         last_channels = 4
-        if g_use_selfsupervised_timeconsistency and g_timeconsistency_type == 'oflow':
+        if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
             last_channels += 2
         model = nn.Sequential(
             nn.Conv2d(513, 1024, kernel_size=3, stride=1, padding=1, bias=False),
@@ -74,7 +76,8 @@ class RenderingCNN(nn.Module):
         )
         return model
 
-    def get_model_cnn(self):
+    @staticmethod
+    def get_model_cnn():
         model = nn.Sequential(
             nn.Conv2d(513, 1024, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
