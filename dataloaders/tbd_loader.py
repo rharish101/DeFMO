@@ -11,7 +11,6 @@ import torch
 from helpers.torch_helpers import *
 from PIL import Image, ImageDraw
 from torchvision.utils import save_image
-from utils import *
 from vis import *
 
 from dataloaders.loader import get_transform
@@ -187,9 +186,9 @@ def evaluate_on(
 
             if not gtp.w_trajgt:
                 if gtp.use_hs:
-                    bbox, radius = fmo_detect_hs(gt_hs, B)
+                    bbox, radius = utils.fmo_detect_hs(gt_hs, B)
                 else:
-                    bbox, radius = fmo_detect_maxarea(I, B)
+                    bbox, radius = utils.fmo_detect_maxarea(I, B)
                 if np.min(radius) < 5:
                     if verbose:
                         print(
@@ -199,22 +198,22 @@ def evaluate_on(
                         )
                     continue
             else:
-                bbox = extend_bbox_uniform(bbox, radius, I.shape)
+                bbox = utils.extend_bbox_uniform(bbox, radius, I.shape)
 
-            bbox_tight = extend_bbox_uniform(bbox.copy(), 10, I.shape)
+            bbox_tight = utils.extend_bbox_uniform(bbox.copy(), 10, I.shape)
             if gtp.use_hs:
-                bbox_tight = bbox_fmo(bbox_tight, gt_hs, B)
-            bbox = extend_bbox(
+                bbox_tight = utils.bbox_fmo(bbox_tight, gt_hs, B)
+            bbox = utils.extend_bbox(
                 bbox_tight.copy(),
                 ext_factor * np.max(radius),
                 config.resolution_y / config.resolution_x,
                 I.shape,
             )
 
-            im_crop = crop_resize(
+            im_crop = utils.crop_resize(
                 I, bbox, (config.resolution_x, config.resolution_y)
             )
-            bgr_crop = crop_resize(
+            bgr_crop = utils.crop_resize(
                 B, bbox, (config.resolution_x, config.resolution_y)
             )
 
@@ -259,7 +258,7 @@ def evaluate_on(
                     .numpy()
                     .transpose(2, 3, 1, 0)
                 )
-                est_hs_crop = rgba2hs(renders_rgba, bgr_crop)
+                est_hs_crop = utils.rgba2hs(renders_rgba, bgr_crop)
 
                 est_traj_prev = est_traj
                 if True:
@@ -274,32 +273,32 @@ def evaluate_on(
                         .numpy()
                         .transpose(2, 3, 1, 0)
                     )
-                est_traj = rev_crop_resize_traj(
+                est_traj = rutils.ev_crop_resize_traj(
                     est_traj, bbox, (config.resolution_x, config.resolution_y)
                 )
 
             if do_deblatting or do_tbdo:
                 if gtp.use_hs:
-                    bbox_temp = bbox_detect_hs(
-                        crop_only(gt_hs[:, :, :, 0], bbox_tight),
-                        crop_only(B, bbox_tight),
+                    bbox_temp = utils.bbox_detect_hs(
+                        utils.crop_only(gt_hs[:, :, :, 0], bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
                     if len(bbox_temp) == 0:
                         bbox_temp = bbox_tight
                     debl_dim = bbox_temp[2:] - bbox_temp[:2]
                 else:
                     debl_dim = (radius, radius)
-                bbox_debl = extend_bbox_uniform(
+                bbox_debl = utils.extend_bbox_uniform(
                     bbox_tight.copy(), 0.5 * radius, I.shape
                 )
                 if do_tbdo and gtp.w_trajgt:
-                    rgba_tbd3d_or, Hso_crop = deblatting_oracle_runner(
-                        crop_only(I, bbox_debl),
-                        crop_only(B, bbox_debl),
+                    rgba_tbd3d_or, Hso_crop = utils.deblatting_oracle_runner(
+                        utils.crop_only(I, bbox_debl),
+                        utils.crop_only(B, bbox_debl),
                         debl_dim,
                         gt_traj[[1, 0]] - bbox_debl[:2, None],
                     )
-                    Hso = rev_crop_resize(
+                    Hso = utils.rev_crop_resize(
                         Hso_crop[:, :, None, :][:, :, [-1, -1, -1], :],
                         bbox_debl,
                         np.zeros(I.shape),
@@ -307,7 +306,7 @@ def evaluate_on(
                     est_hs_tbd3d0 = np.zeros(I.shape + (gtp.nsplits,))
                     for tmki in range(gtp.nsplits):
                         Hsc = Hso[:, :, 0, tmki] / np.sum(Hso[:, :, 0, tmki])
-                        est_hs_tbd3d0[:, :, :, tmki] = fmo_model(
+                        est_hs_tbd3d0[:, :, :, tmki] = utils.fmo_model(
                             B,
                             Hsc,
                             rgba_tbd3d_or[:, :, :3, tmki],
@@ -316,10 +315,10 @@ def evaluate_on(
                     if gtp.use_hs:
                         seq_score_tracker_tbd3do.next_appearance(
                             kk,
-                            crop_only(gt_hs, bbox_tight),
-                            crop_only(est_hs_tbd3d0, bbox_tight),
-                            crop_only(I, bbox_tight),
-                            crop_only(B, bbox_tight),
+                            utils.crop_only(gt_hs, bbox_tight),
+                            utils.crop_only(est_hs_tbd3d0, bbox_tight),
+                            utils.crop_only(I, bbox_tight),
+                            utils.crop_only(B, bbox_tight),
                         )
 
                 if do_deblatting:
@@ -331,9 +330,9 @@ def evaluate_on(
                         rgba_tbd3d_crop,
                         est_traj_tbd,
                         Hs,
-                    ) = deblatting_runner(
-                        crop_only(I, bbox_debl),
-                        crop_only(B, bbox_debl),
+                    ) = utils.deblatting_runner(
+                        utils.crop_only(I, bbox_debl),
+                        utils.crop_only(B, bbox_debl),
                         gtp.nsplits,
                         debl_dim,
                     )
@@ -341,24 +340,24 @@ def evaluate_on(
                     est_traj_tbd[0] += bbox_debl[1]
                     est_traj_tbd[1] += bbox_debl[0]
                     if gtp.use_hs:
-                        gt_hs_debl_crop = crop_only(gt_hs, bbox_debl)
-                        est_hs_tbd_crop, do_flip_debl = sync_directions(
+                        gt_hs_debl_crop = utils.crop_only(gt_hs, bbox_debl)
+                        est_hs_tbd_crop, do_flip_debl = utils.sync_directions(
                             est_hs_tbd_crop, gt_hs_debl_crop
                         )
-                        est_hs_tbd3d_crop, do_flip_debl = sync_directions(
+                        est_hs_tbd3d_crop, do_flip_debl = utils.sync_directions(
                             est_hs_tbd3d_crop, gt_hs_debl_crop
                         )
                         if do_flip_debl:
                             rgba_tbd_crop = rgba_tbd_crop[:, :, :, ::-1]
                             rgba_tbd3d_crop = rgba_tbd3d_crop[:, :, :, ::-1]
-                    est_hs_tbd = rev_crop_resize(est_hs_tbd_crop, bbox_debl, I)
-                    est_hs_tbd3d = rev_crop_resize(
+                    est_hs_tbd = utils.rev_crop_resize(est_hs_tbd_crop, bbox_debl, I)
+                    est_hs_tbd3d = utils.rev_crop_resize(
                         est_hs_tbd3d_crop, bbox_debl, I
                     )
-                    rgb_tbd_crop = rev_crop_resize(
+                    rgb_tbd_crop = utils.rev_crop_resize(
                         rgba2rgb(rgba_tbd_crop), bbox_debl, I
                     )
-                    rgb_tbd3d_crop = rev_crop_resize(
+                    rgb_tbd3d_crop = utils.rev_crop_resize(
                         rgba2rgb(rgba_tbd3d_crop), bbox_debl, I
                     )
                     logger_tbd.write_trajest(est_traj_tbd)
@@ -369,25 +368,25 @@ def evaluate_on(
                     if gtp.use_hs:
                         seq_score_tracker_tbd.next_appearance(
                             kk,
-                            crop_only(gt_hs, bbox_tight),
-                            crop_only(est_hs_tbd, bbox_tight),
-                            crop_only(I, bbox_tight),
-                            crop_only(B, bbox_tight),
+                            utils.crop_only(gt_hs, bbox_tight),
+                            utils.crop_only(est_hs_tbd, bbox_tight),
+                            utils.crop_only(I, bbox_tight),
+                            utils.crop_only(B, bbox_tight),
                         )
                         seq_score_tracker_tbd3d.next_appearance(
                             kk,
-                            crop_only(gt_hs, bbox_tight),
-                            crop_only(est_hs_tbd3d, bbox_tight),
-                            crop_only(I, bbox_tight),
-                            crop_only(B, bbox_tight),
+                            utils.crop_only(gt_hs, bbox_tight),
+                            utils.crop_only(est_hs_tbd3d, bbox_tight),
+                            utils.crop_only(I, bbox_tight),
+                            utils.crop_only(B, bbox_tight),
                         )
                     logger_tbd3d.write_crops(
                         kk,
-                        crop_only(rgb_tbd3d_crop, bbox_tight),
-                        crop_only(est_hs_tbd3d, bbox_tight),
-                        crop_only(gt_hs, bbox_tight),
-                        crop_only(I, bbox_tight),
-                        crop_only(B, bbox_tight),
+                        utils.crop_only(rgb_tbd3d_crop, bbox_tight),
+                        utils.crop_only(est_hs_tbd3d, bbox_tight),
+                        utils.crop_only(gt_hs, bbox_tight),
+                        utils.crop_only(I, bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
 
             if do_sota18:
@@ -395,7 +394,7 @@ def evaluate_on(
                     est_hs_sota18 = run_sota18(I)
                 else:
                     est_hs_sota18_crop = run_sota18(im_crop)
-                    est_hs_sota18 = rev_crop_resize(
+                    est_hs_sota18 = utils.rev_crop_resize(
                         est_hs_sota18_crop, bbox, I
                     )
                 if gtp.use_hs:
@@ -405,10 +404,10 @@ def evaluate_on(
                         )
                     seq_score_tracker_sota18.next_appearance(
                         kk,
-                        crop_only(gt_hs, bbox_tight),
-                        crop_only(est_hs_sota18, bbox_tight),
-                        crop_only(I, bbox_tight),
-                        crop_only(B, bbox_tight),
+                        utils.crop_only(gt_hs, bbox_tight),
+                        utils.crop_only(est_hs_sota18, bbox_tight),
+                        utils.crop_only(I, bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
                 else:
                     est_hs_sota18 = np.concatenate(
@@ -417,7 +416,7 @@ def evaluate_on(
 
             if do_deblurgan:
                 est_hs_deblurgan_crop = run_deblurgan(im_crop)
-                est_hs_deblurgan = rev_crop_resize(
+                est_hs_deblurgan = utils.rev_crop_resize(
                     est_hs_deblurgan_crop[..., None], bbox, I
                 )[..., 0]
                 est_hs_deblurgan = np.repeat(
@@ -426,10 +425,10 @@ def evaluate_on(
                 if gtp.use_hs:
                     seq_score_tracker_dg.next_appearance(
                         kk,
-                        crop_only(gt_hs, bbox_tight),
-                        crop_only(est_hs_deblurgan, bbox_tight),
-                        crop_only(I, bbox_tight),
-                        crop_only(B, bbox_tight),
+                        utils.crop_only(gt_hs, bbox_tight),
+                        utils.crop_only(est_hs_deblurgan, bbox_tight),
+                        utils.crop_only(I, bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
 
             if do_defmo:
@@ -442,15 +441,15 @@ def evaluate_on(
                     )
                     logger.write_trajgt(gt_traj)
 
-                gt_hs_crop = crop_resize(
+                gt_hs_crop = utils.crop_resize(
                     gt_hs, bbox, (config.resolution_x, config.resolution_y)
                 )
                 if gtp.use_hs:
-                    est_hs_crop, do_flip = sync_directions(
+                    est_hs_crop, do_flip = utils.sync_directions(
                         est_hs_crop, gt_hs_crop
                     )
                 else:
-                    est_hs_crop, est_traj, do_flip = sync_directions_smooth(
+                    est_hs_crop, est_traj, do_flip = utils.sync_directions_smooth(
                         est_hs_crop, est_traj, est_traj_prev, radius
                     )
                 if do_flip:
@@ -459,14 +458,14 @@ def evaluate_on(
                 # est_hs = None
                 # if renders[:,:,-1:].max() > 0.05:
                 logger.write_trajest(est_traj)
-                est_hs = rev_crop_resize(est_hs_crop, bbox, I)
+                est_hs = utils.rev_crop_resize(est_hs_crop, bbox, I)
                 if gtp.use_hs:
                     # logger.write_crops(kk,crop_only(rgba2rgb(rev_crop_resize(renders_rgba,bbox,np.ones(I.shape[:2]+(4,)))),bbox_tight), crop_only(est_hs,bbox_tight),crop_only(gt_hs,bbox_tight),crop_only(I,bbox_tight),crop_only(B,bbox_tight))
                     logger.write_crops_3c(
                         kk,
-                        crop_only(
+                        utils.crop_only(
                             rgba2rgb(
-                                rev_crop_resize(
+                                utils.rev_crop_resize(
                                     renders_rgba,
                                     bbox,
                                     np.ones(I.shape[:2] + (4,)),
@@ -474,17 +473,17 @@ def evaluate_on(
                             ),
                             bbox_tight,
                         ),
-                        crop_only(est_hs, bbox_tight),
-                        crop_only(gt_hs, bbox_tight),
-                        crop_only(I, bbox_tight),
-                        crop_only(B, bbox_tight),
+                        utils.crop_only(est_hs, bbox_tight),
+                        utils.crop_only(gt_hs, bbox_tight),
+                        utils.crop_only(I, bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
                     seq_score_tracker.next_appearance(
                         kk,
-                        crop_only(gt_hs, bbox_tight),
-                        crop_only(est_hs, bbox_tight),
-                        crop_only(I, bbox_tight),
-                        crop_only(B, bbox_tight),
+                        utils.crop_only(gt_hs, bbox_tight),
+                        utils.crop_only(est_hs, bbox_tight),
+                        utils.crop_only(I, bbox_tight),
+                        utils.crop_only(B, bbox_tight),
                     )
                     if eval_gt:
                         input_gt_batch = (
@@ -547,8 +546,8 @@ def evaluate_on(
                                 est_gt_hs_crop[:, :, :, tempi, :],
                                 nothing1,
                                 nothing2,
-                            ) = sync_directions_smooth(
-                                rgba2hs(
+                            ) = utils.sync_directions_smooth(
+                                utils.rgba2hs(
                                     renders_gt_rgba[:, :, :, tempi, :],
                                     bgr_crop,
                                 ),
@@ -557,7 +556,7 @@ def evaluate_on(
                                 200,
                             )
                             old_traj = est_gt_traj
-                        est_gt_hs = rev_crop_resize(
+                        est_gt_hs = utils.rev_crop_resize(
                             est_gt_hs_crop.reshape(
                                 est_gt_hs_crop.shape[:3]
                                 + (eval_gt_steps * gtp.nsplits,)
@@ -567,9 +566,9 @@ def evaluate_on(
                         )
                         logger.write_crops_4c(
                             kk,
-                            crop_only(
+                            utils.crop_only(
                                 rgba2rgb(
-                                    rev_crop_resize(
+                                    utils.rev_crop_resize(
                                         renders_rgba,
                                         bbox,
                                         np.ones(I.shape[:2] + (4,)),
@@ -577,11 +576,11 @@ def evaluate_on(
                                 ),
                                 bbox_tight,
                             ),
-                            crop_only(est_hs, bbox_tight),
-                            crop_only(gt_hs, bbox_tight),
-                            crop_only(I, bbox_tight),
-                            crop_only(B, bbox_tight),
-                            crop_only(est_gt_hs, bbox_tight),
+                            utils.crop_only(est_hs, bbox_tight),
+                            utils.crop_only(gt_hs, bbox_tight),
+                            utils.crop_only(I, bbox_tight),
+                            utils.crop_only(B, bbox_tight),
+                            utils.crop_only(est_gt_hs, bbox_tight),
                         )
 
                 else:
@@ -699,7 +698,7 @@ def get_tbd_sample(
         B = np.median(Vk, 3)
 
         if mode == "tbd3d" or mode == "tbdfalling":
-            bbox, minor_axis_length = fmo_detect_maxarea(I, B)
+            bbox, minor_axis_length = utils.fmo_detect_maxarea(I, B)
         elif mode == "tbd":
             bbox, minor_axis_length = fmo_detect(I, B)
 
