@@ -1,4 +1,5 @@
 *__pycache__*
+*.mypy_cache*
 lsf.*
 output/*
 saved_models/*

@@ -1,9 +1,10 @@
+from config import Config
 import torch
 import torch.nn as nn
 import torchvision.models
 
 class RenderingCNN(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Config):
         super().__init__()
         # self.net = self.get_model_resnet(config)
         # self.net = self.get_model_resnet_smaller(config)
@@ -11,7 +12,7 @@ class RenderingCNN(nn.Module):
         self.rgba_operation = nn.Sigmoid()
 
     @staticmethod
-    def get_model_resnet_smaller():
+    def get_model_resnet_smaller() -> nn.Module:
         model = nn.Sequential(
             nn.Conv2d(1025, 1024, kernel_size=3, stride=1, padding=1, bias=False),
             nn.ReLU(inplace=True),
@@ -31,7 +32,7 @@ class RenderingCNN(nn.Module):
         return model
 
     @staticmethod
-    def get_model_resnet(config):
+    def get_model_resnet(config: Config) -> nn.Module:
         last_channels = 4
         if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
             last_channels += 2
@@ -54,7 +55,7 @@ class RenderingCNN(nn.Module):
         return model
 
     @staticmethod
-    def get_model_resnet_tiny(config):
+    def get_model_resnet_tiny(config: Config) -> nn.Module:
         last_channels = 4
         if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
             last_channels += 2
@@ -77,7 +78,7 @@ class RenderingCNN(nn.Module):
         return model
 
     @staticmethod
-    def get_model_cnn():
+    def get_model_cnn() -> nn.Module:
         model = nn.Sequential(
             nn.Conv2d(513, 1024, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
@@ -102,17 +103,17 @@ class RenderingCNN(nn.Module):
         )
         return model
 
-    def forward(self, latent, times):
-        renders = []
-        shuffled_times = []
-        for ki in range(times.shape[0]): shuffled_times.append(torch.randperm(times.shape[1]))
-        shuffled_times = torch.stack(shuffled_times,1).contiguous().T
+    def forward(self, latent: torch.Tensor, times: torch.Tensor) -> torch.Tensor:
+        renders_list = []
+        shuffled_times_list = []
+        for ki in range(times.shape[0]): shuffled_times_list.append(torch.randperm(times.shape[1]))
+        shuffled_times = torch.stack(shuffled_times_list,1).contiguous().T
         for ki in range(times.shape[1]):
             t_tensor = times[range(times.shape[0]),shuffled_times[:,ki]].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, latent.shape[2], latent.shape[3])
             latenti = torch.cat((t_tensor,latent),1)
             result = self.net(latenti)
-            renders.append(result)
-        renders = torch.stack(renders,1).contiguous()
+            renders_list.append(result)
+        renders = torch.stack(renders_list,1).contiguous()
         renders[:,:,:4] = self.rgba_operation(renders[:,:,:4])
         for ki in range(times.shape[0]): 
             renders[ki,shuffled_times[ki,:]] = renders[ki,:].clone()

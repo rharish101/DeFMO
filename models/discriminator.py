@@ -4,7 +4,7 @@ from torch.nn.utils import spectral_norm
 from torchvision.models import resnet18
 
 
-def spectralize(module):
+def spectralize(module: nn.Module) -> nn.Module:
     if 'weight' in module._parameters:
         return spectral_norm(module)
     for key, value in module._modules.items():
@@ -13,7 +13,7 @@ def spectralize(module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         model = resnet18(pretrained=True)
@@ -27,13 +27,13 @@ class Discriminator(nn.Module):
         net = nn.Sequential(*layers[:-2], combine, layers[-2])
         self.net = spectralize(net)
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         noise = torch.randn_like(inputs) * 1e-3
         return self.net(inputs + noise).flatten()
 
 
 class TemporalDiscriminator(nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         model = resnet18(pretrained=True)
@@ -53,5 +53,5 @@ class TemporalDiscriminator(nn.Module):
         net = nn.Sequential(*layers[:-2], combine, layers[-2])
         self.net = spectralize(net)
 
-    def forward(self, inputs):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.net(inputs).flatten()

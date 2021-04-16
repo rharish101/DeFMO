@@ -1,5 +1,5 @@
 import time
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +17,7 @@ from models.loss import FMOLoss, GANLoss, TemporalGANLoss, fmo_loss
 from models.rendering import RenderingCNN
 
 
-def main(args):
+def main(args: Namespace) -> None:
     config = load_config(args.config)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -281,48 +281,35 @@ def main(args):
                         np.mean(supervised_loss),
                         global_step,
                     )
-                    print(
-                        ", loss {:.3f}".format(np.mean(supervised_loss)),
-                        end=" ",
-                    )
+                    print(f", loss {np.mean(supervised_loss):.3f}", end=" ")
                 if config.use_selfsupervised_model:
                     writer.add_scalar(
                         "Loss/train_selfsupervised_model",
                         np.mean(model_losses),
                         global_step,
                     )
-                    print(
-                        ", model {:.3f}".format(np.mean(model_losses)), end=" "
-                    )
+                    print(f", model {np.mean(model_losses):.3f}", end=" ")
                 if config.use_selfsupervised_sharp_mask:
                     writer.add_scalar(
                         "Loss/train_selfsupervised_sharpness",
                         np.mean(sharp_losses),
                         global_step,
                     )
-                    print(
-                        ", sharp {:.3f}".format(np.mean(sharp_losses)), end=" "
-                    )
+                    print(f", sharp {np.mean(sharp_losses):.3f}", end=" ")
                 if config.use_selfsupervised_timeconsistency:
                     writer.add_scalar(
                         "Loss/train_selfsupervised_timeconsistency",
                         np.mean(timecons_losses),
                         global_step,
                     )
-                    print(
-                        ", time {:.3f}".format(np.mean(timecons_losses)),
-                        end=" ",
-                    )
+                    print(f", time {np.mean(timecons_losses):.3f}", end=" ")
                 if config.use_latent_learning:
                     writer.add_scalar(
                         "Loss/train_selfsupervised_latent",
                         np.mean(latent_losses),
                         global_step,
                     )
-                    print(
-                        ", latent {:.3f}".format(np.mean(latent_losses)),
-                        end=" ",
-                    )
+                    print(f", latent {np.mean(latent_losses):.3f}", end=" ")
                 if config.use_gan_loss:
                     writer.add_scalar(
                         "Loss/train_gan_generator",
@@ -334,10 +321,8 @@ def main(args):
                         np.mean(disc_losses),
                         global_step,
                     )
-                    print(", gen {:.3f}".format(np.mean(gen_losses)), end=" ")
-                    print(
-                        ", disc {:.3f}".format(np.mean(disc_losses)), end=" "
-                    )
+                    print(f", gen {np.mean(gen_losses):.3f}", end=" ")
+                    print(f", disc {np.mean(disc_losses):.3f}", end=" ")
                 if config.use_gan_timeconsistency:
                     writer.add_scalar(
                         "Loss/train_temp_gan_generator",
@@ -350,15 +335,13 @@ def main(args):
                         global_step,
                     )
                     print(
-                        ", temp_gen {:.3f}".format(np.mean(temp_gen_losses)),
-                        end=" ",
+                        f", temp_gen {np.mean(temp_gen_losses):.3f}", end=" "
                     )
                     print(
-                        ", temp_disc {:.3f}".format(np.mean(temp_disc_losses)),
-                        end=" ",
+                        f", temp_disc {np.mean(temp_disc_losses):.3f}", end=" "
                     )
 
-                print(", joint {:.3f}".format(np.mean(joint_losses)))
+                print(f", joint {np.mean(joint_losses):.3f}")
 
                 writer.add_scalar(
                     "LR/value", optimizer.param_groups[0]["lr"], global_step
@@ -436,7 +419,7 @@ def main(args):
                         temp_disc.module.state_dict(),
                         l_temp_folder / "temp_disc_best.pt",
                     )
-                best_val_loss = val_losses[-1]
+                best_val_loss = float(val_losses[-1])
                 print("    Saving best validation loss model!  ")
 
             global_step = (epoch + 1) * len(training_generator)

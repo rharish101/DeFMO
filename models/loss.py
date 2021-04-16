@@ -1,15 +1,17 @@
 import random
+from config import Config
 import torch.nn as nn
 import torch
-from helpers.torch_helpers import *
+from helpers.torch_helpers import normalized_cross_correlation_channels
+from typing import Optional
 
 class FMOLoss(nn.Module):
-    def __init__(self, config, reduction='none'):
+    def __init__(self, config: Config, reduction: str='none'):
         super(FMOLoss, self).__init__()
         self.config = config
         self.reduction = reduction
 
-    def forward(self, renders_all, hs_frames, input_batch, latents=None):
+    def forward(self, renders_all: torch.Tensor, hs_frames: torch.Tensor, input_batch: torch.Tensor, latents: Optional[torch.Tensor]=None) -> torch.Tensor:
         assert renders_all.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
         renders = renders_all[:,:,:4]
         renders_supervised = renders[:,:self.config.fmo_train_steps]
@@ -52,6 +54,7 @@ class FMOLoss(nn.Module):
         loss_latent = 0*supervised_loss
         if self.config.use_latent_learning:
             # normalization = nn.MSELoss(reduction='none')(latents[0],torch.flip(latents[1],[0])).mean([1,2,3]).max()
+            assert latents is not None
             loss_latent = nn.MSELoss(reduction='none')(latents[0],latents[1]).mean([1,2,3]) # / normalization
 
         loss = supervised_loss + loss_timecons + model_loss + loss_sharp_mask + loss_latent
@@ -61,7 +64,7 @@ class FMOLoss(nn.Module):
         else:
             raise Exception('Unexpected reduction {}'.format(self.reduction))
 
-def oflow_loss(renders):
+def oflow_loss(renders: torch.Tensor) -> torch.Tensor:
     time_inc = 1/(renders.shape[1]-1)
     imgs1 = renders[:,:-1,:4]
     flows = time_inc*renders[:,:-1,4:]
@@ -72,7 +75,7 @@ def oflow_loss(renders):
     loss_o = nn.L1Loss(reduction='none')(imgs2, torch.reshape(img1_wrapped, imgs1.shape))*renders[:,1:,3:4]
     return loss_o.mean([1,2,3,4])
 
-def flow_warp(img, flow):
+def flow_warp(img: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
     """Warp an image or feature map with optical flow (from https://www.programcreek.com/python/example/104458/torch.nn.functional.grid_sample)
     Args:
         x (Tensor): size (N, C, H, W)
@@ -97,7 +100,7 @@ def flow_warp(img, flow):
     output = torch.nn.functional.grid_sample(img, vgrid_scaled, mode='bilinear', padding_mode='border')
     return output 
 
-def fmo_loss(Yp, Y):
+def fmo_loss(Yp: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
     YM = Y[:,:,-1:,:,:]
     YpM = Yp[:,:,-1:,:,:]
     YF = Y[:,:,:3]
@@ -111,7 +114,7 @@ def fmo_loss(Yp, Y):
     loss = 2*mloss + floss
     return loss
 
-def batch_loss(YpM, YM, YMb):
+def batch_loss(YpM: torch.Tensor, YM: torch.Tensor, YMb: torch.Tensor) -> torch.Tensor:
     losses = nn.L1Loss(reduction='none')(YpM*YMb, YM*YMb)
     if len(losses.shape) > 4:
         bloss = losses.sum([1,2,3,4]) / YMb.sum([1,2,3,4])
@@ -119,7 +122,7 @@ def batch_loss(YpM, YM, YMb):
         bloss = losses.sum([1,2,3]) / (YMb.sum([1,2,3]) + 0.01)
     return bloss
 
-def fmo_loss_v1(Yp, Y):
+def fmo_loss_v1(Yp: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
     YM = Y[:,:,-1:,:,:]
     YpM = Yp[:,:,-1:,:,:]
     YF = Y[:,:,:3]
@@ -135,7 +138,7 @@ def fmo_loss_v1(Yp, Y):
     loss = mloss + 2*floss
     return loss
     
-def fmo_model_loss(input_batch, renders, Mask = None):
+def fmo_model_loss(input_batch: torch.Tensor, renders: torch.Tensor, Mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     expected = input_batch[:,3:] * (1 - renders[:,3:]) + renders[:,:3]
     if Mask is None:
         Mask = renders[:,3:] > 0.05
@@ -145,15 +148,15 @@ def fmo_model_loss(input_batch, renders, Mask = None):
     # model_loss = losses.mean([1,2,3])
     return model_loss
 
-def mask_sharp_loss(renders):
+def mask_sharp_loss(renders: torch.Tensor) -> torch.Tensor:
     loss = renders[:,3] * (1 - renders[:,3])
     return torch.mean(loss, [1,2])
 
-def mask_sharp_loss_batchsum(renders):
+def mask_sharp_loss_batchsum(renders: torch.Tensor) -> torch.Tensor:
     loss = renders[:,:,3] * (1 - renders[:,:,3])
     return torch.mean(loss, [2,3]).sum(1)
 
-def mask_sharp_loss_entropy_batchsum(renders, eps=1e-12):
+def mask_sharp_loss_entropy_batchsum(renders: torch.Tensor, eps: float=1e-12) -> torch.Tensor:
     posr = renders[:,:,3]
     logp = torch.log2(posr+eps)
     negr = 1-posr
@@ -161,12 +164,11 @@ def mask_sharp_loss_entropy_batchsum(renders, eps=1e-12):
     loss = -posr*logp - negr*logn
     return torch.mean(loss, [2,3]).sum(1)
 
-def temporal_consistency_loss(renders):
-    # nccs = 1-normalized_cross_correlation(renders[:,:-1,-1], renders[:,1:,-1])
+def temporal_consistency_loss(renders: torch.Tensor) -> torch.Tensor:
     nccs = 1-normalized_cross_correlation_channels(renders[:,:-1], renders[:,1:])
     return nccs.mean(1)
 
-def gan_loss(generated, real, discriminator):
+def gan_loss(generated: torch.Tensor, real: torch.Tensor, discriminator: nn.Module) -> torch.Tensor:
     real_out = discriminator(real)
     fake_out = discriminator(generated)
 
@@ -176,16 +178,16 @@ def gan_loss(generated, real, discriminator):
     return gen_loss, disc_loss
 
 class GANLoss(nn.Module):
-    def __init__(self, config, reduction='none'):
+    def __init__(self, config: Config, reduction: str='none'):
         super().__init__()
         self.config = config
         self.reduction = reduction
 
-    def forward(self, renders, hs_frames, discriminator):
+    def forward(self, renders: torch.Tensor, hs_frames: torch.Tensor, discriminator: nn.Module) -> torch.Tensor:
         assert renders.shape[0] == hs_frames.shape[0], "predict & target batch size don't match"
         renders = renders[:,:self.config.fmo_train_steps,:4]
 
-        gen_loss, disc_loss = 0, 0
+        gen_loss, disc_loss = 0.0, 0.0
 
         for frame_num in range(self.config.fmo_train_steps):
             losses = gan_loss(renders[:, frame_num], hs_frames[:, frame_num], discriminator)
@@ -201,16 +203,16 @@ class GANLoss(nn.Module):
             raise Exception('Unexpected reduction {}'.format(self.reduction))
 
 class TemporalGANLoss(nn.Module):
-    def __init__(self, config, reduction='none'):
+    def __init__(self, config: Config, reduction: str='none'):
         super().__init__()
         self.config = config
         self.reduction = reduction
 
-    def forward(self, renders, discriminator):
+    def forward(self, renders: torch.Tensor, discriminator: nn.Module) -> torch.Tensor:
         renders = renders[:,:self.config.fmo_train_steps,:4]
 
-        gen_loss = 0
-        disc_loss = 0
+        gen_loss = 0.0
+        disc_loss = 0.0
 
         for frame_num in range(self.config.fmo_train_steps - 1):
             # Offset from the current index

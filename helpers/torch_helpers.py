@@ -1,5 +1,5 @@
 import torch
-from torch.nn import functional as F
+from torch.nn import Module, functional as F
 from torchvision.utils import save_image
 from skimage.measure import label, regionprops
 import os
@@ -147,7 +147,7 @@ def get_figure(encoder, rendering, device, val_batch):
 		ax.set_title("t = {}".format(times[idx]))
 	return fig
 
-def get_images(encoder, rendering, device, val_batch):
+def get_images(encoder: Module, rendering: Module, device: torch.device, val_batch: torch.Tensor) -> torch.Tensor:
 	with torch.no_grad():
 		latent = encoder(val_batch)
 		times = torch.linspace(0,1,2).to(device)

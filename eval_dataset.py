@@ -1,25 +1,15 @@
 import numpy as np
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-import pdb
-import os
+from argparse import ArgumentParser, Namespace
 import torch
 from pathlib import Path
-from torchvision.utils import save_image
 
-from vis import *
-from shutil import copyfile
-
-from models.encoder import *
-from models.rendering import *
-from models.loss import *
-from dataloaders.loader import *
+from models.encoder import EncoderCNN
+from models.rendering import RenderingCNN
 from dataloaders.tbd_loader import evaluate_on
-from helpers.torch_helpers import *
 from config import load_config
-from renderer.run_addbg import *
 from helpers.paper_helpers import get_figure_images
 
-def main(args):
+def main(args: Namespace) -> None:
     config = load_config(args.config)
     print(torch.__version__)
 
@@ -57,12 +47,6 @@ def main(args):
     ## run on falling objects 
     if True:
         get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 2, 31+2, results_mode=True, n_occ=7)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 0, 4, results_mode=True)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 1, 7, results_mode=True)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 2, 2, results_mode=True)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 3, 2, results_mode=True)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 4, 7, results_mode=True)
-        # get_figure_images(args.dataset_folder, encoder, rendering, device, 'tbdfalling', 5, 6, results_mode=True)
 
     ## run on tbd-3d
     if False:
