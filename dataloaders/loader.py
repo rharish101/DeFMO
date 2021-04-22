@@ -1,19 +1,20 @@
-import os
 import random
+from pathlib import Path
 from typing import Callable, List, Sequence, Tuple, Union
 
 import h5py
 import numpy as np
 import torch
-from config import Config
 from PIL import Image
 from torchvision import transforms
+
+from config import Config
 
 
 class ShapeBlurDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        dataset_folder: str,
+        dataset_folder: Path,
         config: Config,
         render_objs: Sequence[str],
         number_per_category: int,
@@ -112,21 +113,21 @@ def get_transform(
 
 
 def get_training_sample(
-    dataset_folder: str,
+    dataset_folder: Path,
     config: Config,
     render_objs: Sequence[str],
     max_obj: int,
     min_obj: int = 1,
     use_latent_learning: bool = False,
 ) -> Tuple[torch.Tensor, List[str]]:
-    use_hdf5 = "hdf5" in dataset_folder
+    use_hdf5 = "hdf5" in dataset_folder.name
     if use_hdf5:
         h5_file = h5py.File(dataset_folder, "r", swmr=True)
     while True:
         obj = random.choice(render_objs)
         times = random.randint(min_obj, max_obj)
         if use_hdf5:
-            sample = h5_file[obj]["{}_{:04d}".format(obj, times)]
+            sample = h5_file[obj][f"{obj}_{times:04d}"]
             Im = (sample["im"][...] / 255.0).astype("float32")
             if config.use_median:
                 B = sample["bgr_med"][...]
@@ -136,86 +137,41 @@ def get_training_sample(
             GT = sample["GT"]
             hs_frames = []
             for ki in range(config.fmo_steps):
-                gti = GT["image-{:06d}".format(ki + 1)][...]
+                gti = GT[f"image-{ki+1:06d}"][...]
                 gt_batch = transforms.ToTensor()(
                     (gti / 65536.0).astype("float32")
                 )
                 hs_frames.append(gt_batch)
             gt_paths = torch.stack(hs_frames, 0).contiguous()
         else:
-            filename = os.path.join(
-                dataset_folder, obj, "{}_{:04d}.png".format(obj, times)
-            )
+            filename = Path(dataset_folder, obj, f"{obj}_{times:04d}.png")
+            gt_folder = Path(dataset_folder, obj, "GT", f"{obj}_{times:04d}")
 
             if config.use_median:
-                bgr_path = os.path.join(
-                    dataset_folder,
-                    obj,
-                    "GT",
-                    "{}_{:04d}".format(obj, times),
-                    "bgr_med.png",
-                )
-            if not config.use_median or not os.path.exists(bgr_path):
-                bgr_path = os.path.join(
-                    dataset_folder,
-                    obj,
-                    "GT",
-                    "{}_{:04d}".format(obj, times),
-                    "bgr.png",
-                )
+                bgr_path = gt_folder / "bgr_med.png"
+            if not config.use_median or not bgr_path.exists():
+                bgr_path = gt_folder / "bgr.png"
 
-            if not os.path.exists(filename) or not os.path.exists(bgr_path):
-                print(
-                    "Something does not exist: {} or {}".format(
-                        filename, bgr_path
-                    )
-                )
+            if not filename.exists() or not bgr_path.exists():
+                print(f"Something does not exist: {filename} or {bgr_path}")
                 continue
             Im = Image.open(filename)
             B = Image.open(bgr_path)
             gt_paths = []
             for ki in range(config.fmo_steps):
-                gt_paths.append(
-                    os.path.join(
-                        dataset_folder,
-                        obj,
-                        "GT",
-                        "{}_{:04d}".format(obj, times),
-                        "image-{:06d}.png".format(ki + 1),
-                    )
-                )
+                gt_paths.append(gt_folder / f"image-{ki+1:06d}.png")
 
         preprocess = get_transform(config.normalize)
         if use_latent_learning:
             if use_hdf5:
                 print("Not implemented!")
             else:
-                I2 = Image.open(
-                    os.path.join(
-                        dataset_folder,
-                        obj,
-                        "diffbgr",
-                        "{:04d}_im.png".format(times),
-                    )
-                )
+                diffbgr_folder = Path(dataset_folder, obj, "diffbgr")
+                I2 = Image.open(diffbgr_folder / f"{times:04d}_im.png")
                 if config.use_median:
-                    B2 = Image.open(
-                        os.path.join(
-                            dataset_folder,
-                            obj,
-                            "diffbgr",
-                            "{:04d}_bgrmed.png".format(times),
-                        )
-                    )
+                    B2 = Image.open(diffbgr_folder / f"{times:04d}_bgrmed.png")
                 else:
-                    B2 = Image.open(
-                        os.path.join(
-                            dataset_folder,
-                            obj,
-                            "diffbgr",
-                            "{:04d}_bgr.png".format(times),
-                        )
-                    )
+                    B2 = Image.open(diffbgr_folder / f"{times:04d}_bgr.png")
             input_batch = torch.cat(
                 (
                     preprocess(Im),
@@ -238,34 +194,32 @@ def get_gt_sample(gt_paths: List[str], ti: int) -> torch.Tensor:
     return gt_batch
 
 
-def get_dataset_statistics(dataset_folder: str, config: Config) -> None:
+def get_dataset_statistics(dataset_folder: Path, config: Config) -> None:
     nobj = 0
     all_times = []
     all_objs_max = []
     for obj in config.render_objs:
         times = 0
         while True:
-            filename = os.path.join(
-                dataset_folder, obj, "{}_{:04d}.png".format(obj, times + 1)
-            )
-            bgr_path = os.path.join(
+            filename = Path(dataset_folder, obj, f"{obj}_{times+1:04d}.png")
+            bgr_path = Path(
                 dataset_folder,
                 obj,
                 "GT",
-                "{}_{:04d}".format(obj, times + 1),
+                f"{obj}_{times+1:04d}",
                 "bgr.png",
             )
-            if not os.path.exists(filename) or not os.path.exists(bgr_path):
+            if not filename.exists() or not bgr_path.exists():
                 break
             times += 1
-        print("Object {} has {} instances".format(obj, times))
+        print(f"Object {obj} has {times} instances")
         all_times.append(times)
         if times > 0:
             nobj += 1
         if times == config.number_per_category:
             all_objs_max.append(obj)
-    print("Number of objects {}".format(len(config.render_objs)))
-    print("Number of non-zero objects {}".format(nobj))
+    print(f"Number of objects {len(config.render_objs)}")
+    print(f"Number of non-zero objects {nobj}")
     print(all_times)
     print(all_objs_max)
     print(len(all_objs_max))

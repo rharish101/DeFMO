@@ -97,12 +97,8 @@ def main(args: Namespace) -> None:
         )
     print("")
 
-    dataset_folder = str(
-        args.dataset_folder / "ShapeNetv2/ShapeBlur1000STL.hdf5"
-    )
-    validation_folder = str(
-        args.dataset_folder / "ShapeNetv2/ShapeBlur20STL.hdf5"
-    )
+    dataset_folder = args.dataset_folder / "ShapeNetv2/ShapeBlur1000STL.hdf5"
+    validation_folder = args.dataset_folder / "ShapeNetv2/ShapeBlur20STL.hdf5"
 
     training_set = ShapeBlurDataset(
         dataset_folder=dataset_folder,
