@@ -110,13 +110,6 @@ def main():
     val_losses = []
     best_val_loss = 100.0
     for epoch in range(g_start_epoch, g_epochs):
-        encoder.train()
-        rendering.train()
-        if g_use_gan_loss:
-            discriminator.train()
-        if g_use_gan_timeconsistency:
-            temp_disc.train()
-
         t0 = time.time()
         supervised_loss = []
         model_losses = []
@@ -131,6 +124,13 @@ def main():
             temp_disc_losses = []
         joint_losses = []
         for it, (input_batch, times, hs_frames, times_left) in enumerate(training_generator):
+            encoder.train()
+            rendering.train()
+            if g_use_gan_loss:
+                discriminator.train()
+            if g_use_gan_timeconsistency:
+                temp_disc.train()
+
             input_batch, times, hs_frames, times_left = input_batch.to(device), times.to(device), hs_frames.to(device), times_left.to(device)
 
             if g_use_latent_learning:
@@ -179,6 +179,13 @@ def main():
             joint_losses.append(jloss.item())    
 
             if it % 10 == 0:
+                encoder.eval()
+                rendering.eval()
+                if g_use_gan_loss:
+                    discriminator.eval()
+                if g_use_gan_timeconsistency:
+                    temp_disc.eval()
+
                 global_step = epoch * len(training_generator) + it + 1
                 writer.add_scalar('Loss/train_joint', np.mean(joint_losses), global_step)
                 print("Epoch {:4d}, it {:4d}".format(epoch+1, it), end =" ")
