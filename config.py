@@ -100,8 +100,6 @@ class Config:
     disc_steps: int = 1
     temp_disc_steps: int = 1
 
-    eval_d: int = 5
-
 
 def load_config(config_path: Optional[Path]) -> Config:
     """Load the hyper-param config at the given path.
