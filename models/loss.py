@@ -222,6 +222,9 @@ class TemporalGANLoss(nn.Module):
             gen_loss += losses[0]
             disc_loss += losses[1]
 
+        gen_loss = gen_loss / g_fmo_train_steps
+        disc_loss = disc_loss / g_fmo_train_steps
+
         if self.reduction == 'none':
             return gen_loss, disc_loss
         else:
