@@ -1,33 +1,26 @@
 import argparse
-import os
+from pathlib import Path
+from typing import Optional
 
 import cv2
 import h5py
 from tqdm import tqdm
 
-dataset_folder = "/mnt/lascar/rozumden/dataset/"
-tmp_folder = "/home.stud/rozumden/tmp/"
-if not os.path.exists(dataset_folder):
-    dataset_folder = "/cluster/scratch/denysr/dataset/"
-    tmp_folder = "/cluster/home/denysr/tmp/"
-g_dataset_folder = dataset_folder + "ShapeNetv2/ShapeBlur1000STL"
 
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Load the images, convert them to the network input and "
         "store it as a dataset"
     )
     parser.add_argument(
-        "-i",
-        "--input-dir",
-        default=g_dataset_folder,
+        "input_dir",
+        type=Path,
         help="Input directory containing the image pairs",
     )
     parser.add_argument(
         "-o",
         "--output-file",
-        default=g_dataset_folder + ".hdf5",
+        type=Path,
         help="Output dataset file",
     )
     parser.add_argument(
@@ -39,43 +32,42 @@ def main():
 
     args = parser.parse_args()
 
+    if args.output_file is None:
+        output_file = args.input_dir.parent / args.input_dir.name + ".hdf5"
+    else:
+        output_file = args.output_file
+
     if args.compress:
-        compression_type = "lzf"
+        compression_type: Optional[str] = "lzf"
     else:
         compression_type = None
 
-    all_filenames = [f for f in os.listdir(args.input_dir)]
+    all_filenames = [f for f in args.input_dir.glob("*")]
 
-    # create h5 file where all the data wll be stored
-    if os.path.exists(args.output_file):
-        # TODO ask for confirmation to delete old file
-        os.remove(args.output_file)
-    print(os.getcwd())
-    output_file = h5py.File(args.output_file)
+    # create h5 file where all the data will be stored
+    if output_file.exists():
+        answer = input(f"File '{output_file}' exists. Delete? (Y/n): ")
+        if answer.strip().lower() == "n":
+            return
+        output_file.unlink()
+
+    print(Path.cwd())
+    output_file = h5py.File(output_file)
 
     for obj_type in tqdm(all_filenames):
         # load best aligned images
 
-        output_file.create_group(obj_type)
-        all_objects = [
-            f
-            for f in os.listdir(os.path.join(args.input_dir, obj_type))
-            if ".png" in f
-        ]
+        output_file.create_group(obj_type.name)
+        all_objects = [f for f in obj_type.glob("*") if ".png" in f.name]
 
         for obj_name in tqdm(all_objects):
-            name = "_".join(map(str, obj_name.split(".")[:-1]))
-            output_file[obj_type].create_group(name)
+            name = "_".join(obj_name.stem.split("."))
+            output_file[obj_type.name].create_group(name)
 
-            im_path = str(os.path.join(args.input_dir, obj_type, obj_name))
-            bgr_path = str(
-                os.path.join(args.input_dir, obj_type, "GT", name, "bgr.png")
-            )
-            bgrmed_path = str(
-                os.path.join(
-                    args.input_dir, obj_type, "GT", name, "bgr_med.png"
-                )
-            )
+            im_path = obj_name
+            bgr_folder = Path(obj_type, "GT", name)
+            bgr_path = bgr_folder / "bgr.png"
+            bgrmed_path = bgr_folder / "bgr_med.png"
 
             # load the images
             im = cv2.imread(str(im_path), -1)
@@ -83,35 +75,22 @@ def main():
             bgr_med = cv2.imread(str(bgrmed_path), -1)
 
             # adding data to dataset file
-            output_file[obj_type][name].create_dataset(
+            output_file[obj_type.name][name].create_dataset(
                 "im", data=im, compression=compression_type
             )
-            output_file[obj_type][name].create_dataset(
+            output_file[obj_type.name][name].create_dataset(
                 "bgr", data=bgr, compression=compression_type
             )
-            output_file[obj_type][name].create_dataset(
+            output_file[obj_type.name][name].create_dataset(
                 "bgr_med", data=bgr_med, compression=compression_type
             )
 
-            all_gt = [
-                f
-                for f in os.listdir(
-                    os.path.join(args.input_dir, obj_type, "GT", name)
-                )
-                if "image" in f
-            ]
-            output_file[obj_type][name].create_group("GT")
+            all_gt = [f for f in bgr_folder.glob("*") if "image" in f.name]
+            output_file[obj_type.name][name].create_group("GT")
             for gtname in tqdm(all_gt):
-                gtsavename = "_".join(map(str, gtname.split(".")[:-1]))
-                gtim = cv2.imread(
-                    str(
-                        os.path.join(
-                            args.input_dir, obj_type, "GT", name, gtname
-                        )
-                    ),
-                    -1,
-                )
-                output_file[obj_type][name]["GT"].create_dataset(
+                gtsavename = "_".join(gtname.stem.split("."))
+                gtim = cv2.imread(str(gtname), -1)
+                output_file[obj_type.name][name]["GT"].create_dataset(
                     gtsavename, data=gtim, compression=compression_type
                 )
 
