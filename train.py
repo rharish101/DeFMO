@@ -178,7 +178,8 @@ def main():
             jloss = jloss.mean()
             joint_losses.append(jloss.item())    
 
-            if it % 10 == 0:
+            global_step = epoch * len(training_generator) + it + 1
+            if global_step % 200 == 0:
                 encoder.eval()
                 rendering.eval()
                 if g_use_gan_loss:
@@ -186,7 +187,6 @@ def main():
                 if g_use_gan_timeconsistency:
                     temp_disc.eval()
 
-                global_step = epoch * len(training_generator) + it + 1
                 writer.add_scalar('Loss/train_joint', np.mean(joint_losses), global_step)
                 print("Epoch {:4d}, it {:4d}".format(epoch+1, it), end =" ")
 
