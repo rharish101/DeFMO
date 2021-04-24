@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import time
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from datetime import datetime
