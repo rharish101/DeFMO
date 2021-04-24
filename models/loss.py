@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from config import Config
-from helpers.torch_helpers import normalized_cross_correlation_channels
+from utils import normalized_cross_correlation_channels
 
 
 class FMOLoss(nn.Module):

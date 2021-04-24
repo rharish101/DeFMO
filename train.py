@@ -11,11 +11,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 from config import load_config
 from dataloaders.loader import ShapeBlurDataset, get_training_sample
-from helpers.torch_helpers import get_images
 from models.discriminator import Discriminator, TemporalDiscriminator
 from models.encoder import EncoderCNN
 from models.loss import FMOLoss, GANLoss, TemporalGANLoss, fmo_loss
 from models.rendering import RenderingCNN
+from utils import get_images
 
 
 def main(args: Namespace) -> None:
