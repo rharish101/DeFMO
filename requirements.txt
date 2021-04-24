@@ -4,7 +4,6 @@ scikit-image
 torch
 torchvision
 h5py
-scipy
 Pillow
 tqdm
 tensorboard

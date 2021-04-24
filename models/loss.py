@@ -122,22 +122,6 @@ def batch_loss(YpM: torch.Tensor, YM: torch.Tensor, YMb: torch.Tensor) -> torch.
         bloss = losses.sum([1,2,3]) / (YMb.sum([1,2,3]) + 0.01)
     return bloss
 
-def fmo_loss_v1(Yp: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
-    YM = Y[:,:,-1:,:,:]
-    YpM = Yp[:,:,-1:,:,:]
-    YF = Y[:,:,:3]
-    YpF = Yp[:,:,:3]
-    YMb = YM > 0
-    YMbnot = ~YMb
-
-    mloss = 0.5*nn.L1Loss()(YpM[YMb], YM[YMb]) + 0.5*nn.L1Loss()(YpM[YMbnot], YM[YMbnot])
-    
-    YMb3 = YMb[:,:,[0,0,0]]
-    # floss = nn.L1Loss()( (YpF)[YMb3], (YF)[YMb3])
-    floss = nn.L1Loss()( (YpF*YpM)[YMb3], (YF*YM)[YMb3])
-    loss = mloss + 2*floss
-    return loss
-    
 def fmo_model_loss(input_batch: torch.Tensor, renders: torch.Tensor, Mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     expected = input_batch[:,3:] * (1 - renders[:,3:]) + renders[:,:3]
     if Mask is None:
@@ -148,9 +132,6 @@ def fmo_model_loss(input_batch: torch.Tensor, renders: torch.Tensor, Mask: Optio
     # model_loss = losses.mean([1,2,3])
     return model_loss
 
-def mask_sharp_loss(renders: torch.Tensor) -> torch.Tensor:
-    loss = renders[:,3] * (1 - renders[:,3])
-    return torch.mean(loss, [1,2])
 
 def mask_sharp_loss_batchsum(renders: torch.Tensor) -> torch.Tensor:
     loss = renders[:,:,3] * (1 - renders[:,:,3])

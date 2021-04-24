@@ -6,56 +6,11 @@ import torchvision.models
 class RenderingCNN(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        # self.net = self.get_model_resnet(config)
-        # self.net = self.get_model_resnet_smaller(config)
-        self.net = self.get_model_resnet_tiny(config)
+        self.net = self.get_model(config)
         self.rgba_operation = nn.Sigmoid()
 
     @staticmethod
-    def get_model_resnet_smaller() -> nn.Module:
-        model = nn.Sequential(
-            nn.Conv2d(1025, 1024, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.ReLU(inplace=True),
-            torchvision.models.resnet.Bottleneck(1024,256),
-            nn.PixelShuffle(2),
-            torchvision.models.resnet.Bottleneck(256,64),
-            nn.PixelShuffle(2),
-            torchvision.models.resnet.Bottleneck(64,16),
-            nn.PixelShuffle(2),
-            nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.PixelShuffle(2),
-            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.Sigmoid(),
-        )
-        return model
-
-    @staticmethod
-    def get_model_resnet(config: Config) -> nn.Module:
-        last_channels = 4
-        if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
-            last_channels += 2
-        model = nn.Sequential(
-            nn.Conv2d(2049, 1024, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
-            nn.ReLU(inplace=True),
-            torchvision.models.resnet.Bottleneck(1024,256),
-            nn.PixelShuffle(2),
-            torchvision.models.resnet.Bottleneck(256,64),
-            nn.PixelShuffle(2),
-            torchvision.models.resnet.Bottleneck(64,16),
-            nn.PixelShuffle(2),
-            nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.PixelShuffle(2),
-            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(4, last_channels, kernel_size=3, stride=1, padding=1, bias=True),
-        )
-        return model
-
-    @staticmethod
-    def get_model_resnet_tiny(config: Config) -> nn.Module:
+    def get_model(config: Config) -> nn.Module:
         last_channels = 4
         if config.use_selfsupervised_timeconsistency and config.timeconsistency_type == 'oflow':
             last_channels += 2
@@ -74,32 +29,6 @@ class RenderingCNN(nn.Module):
             nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
             nn.ReLU(inplace=True),
             nn.Conv2d(4, last_channels, kernel_size=3, stride=1, padding=1, bias=True),
-        )
-        return model
-
-    @staticmethod
-    def get_model_cnn() -> nn.Module:
-        model = nn.Sequential(
-            nn.Conv2d(513, 1024, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
-            nn.ReLU(inplace=True),
-            nn.PixelShuffle(2),
-            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
-            nn.ReLU(inplace=True),
-            nn.PixelShuffle(2),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
-            nn.ReLU(inplace=True),
-            nn.PixelShuffle(2),
-            nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),
-            nn.ReLU(inplace=True),
-            nn.PixelShuffle(2),
-            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.Sigmoid(),
         )
         return model
 
