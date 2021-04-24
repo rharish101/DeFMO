@@ -5,7 +5,7 @@ from torchvision.models import resnet18
 
 
 def spectralize(module: nn.Module) -> nn.Module:
-    if 'weight' in module._parameters:
+    if "weight" in module._parameters:
         return spectral_norm(module)
     for key, value in module._modules.items():
         module._modules[key] = spectralize(value)
@@ -20,7 +20,14 @@ class Discriminator(nn.Module):
         layers = list(model.children())
 
         pretrained_weights = layers[0].weight
-        layers[0] = nn.Conv2d(4, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        layers[0] = nn.Conv2d(
+            4,
+            64,
+            kernel_size=(7, 7),
+            stride=(2, 2),
+            padding=(3, 3),
+            bias=False,
+        )
         layers[0].weight.data[:, :3, :, :] = nn.Parameter(pretrained_weights)
 
         combine = nn.Conv2d(512, 1, kernel_size=(1, 1))
@@ -40,7 +47,14 @@ class TemporalDiscriminator(nn.Module):
         layers = list(model.children())
 
         pretrained_weights = layers[0].weight
-        layers[0] = nn.Conv2d(8, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        layers[0] = nn.Conv2d(
+            8,
+            64,
+            kernel_size=(7, 7),
+            stride=(2, 2),
+            padding=(3, 3),
+            bias=False,
+        )
         layers[0].weight.data[:, :3, :, :] = nn.Parameter(pretrained_weights)
         layers[0].weight.data[:, 4:7, :, :] = nn.Parameter(pretrained_weights)
 

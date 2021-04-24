@@ -1,10 +1,10 @@
 import argparse
 import os
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
-from typing import Optional
 import torch
 
 from config import load_config
@@ -79,15 +79,17 @@ def main() -> None:
     rendering.train(False)
 
     if args.im is not None and args.bgr is not None:
-        I = imread(args.im)
-        B = imread(args.bgr)
-        tsr = run_defmo(config, I, B, rendering, encoder, args.steps, device)
-        ## generate results
+        im = imread(args.im)
+        bgr = imread(args.bgr)
+        tsr = run_defmo(
+            config, im, bgr, rendering, encoder, args.steps, device
+        )
+        # generate results
         out = cv2.VideoWriter(
             os.path.join(args.output, "tsr.avi"),
             cv2.VideoWriter_fourcc(*"MJPG"),
             6,
-            (I.shape[1], I.shape[0]),
+            (im.shape[1], im.shape[0]),
             True,
         )
         for ki in range(args.steps):
@@ -97,7 +99,7 @@ def main() -> None:
             out.write((tsr[:, :, [2, 1, 0], ki] * 255).astype(np.uint8))
         out.release()
     elif args.video is not None:
-        ## estimate initial background
+        # estimate initial background
         Ims = []
         cap = cv2.VideoCapture(args.video)
         while cap.isOpened():
@@ -105,14 +107,14 @@ def main() -> None:
             Ims.append(frame)
             if len(Ims) >= args.median:
                 break
-        B = np.median(np.asarray(Ims) / 255, 0)[:, :, [2, 1, 0]]
+        bgr = np.median(np.asarray(Ims) / 255, 0)[:, :, [2, 1, 0]]
 
-        ## run DeFMO
+        # run DeFMO
         out = cv2.VideoWriter(
             os.path.join(args.output, "tsr.avi"),
             cv2.VideoWriter_fourcc(*"MJPG"),
             6,
-            (B.shape[1], B.shape[0]),
+            (bgr.shape[1], bgr.shape[0]),
             True,
         )
         tsr0: Optional[np.ndarray] = None
@@ -126,12 +128,12 @@ def main() -> None:
                     break
                 Ims = Ims[1:]
                 Ims.append(frame)
-                ## update background (running median)
-                B = np.median(np.asarray(Ims) / 255, 0)[:, :, [2, 1, 0]]
+                # update background (running median)
+                bgr = np.median(np.asarray(Ims) / 255, 0)[:, :, [2, 1, 0]]
             frmi += 1
-            I = frame[:, :, [2, 1, 0]] / 255
+            im = frame[:, :, [2, 1, 0]] / 255
             tsr = run_defmo(
-                config, I, B, rendering, encoder, args.steps, device
+                config, im, bgr, rendering, encoder, args.steps, device
             )
             if frmi == 1:
                 tsr0 = tsr
@@ -151,7 +153,7 @@ def main() -> None:
                     ]
                 )
                 if backward < forward:
-                    ## reverse time direction for better alignment
+                    # reverse time direction for better alignment
                     tsr0 = tsr0[..., ::-1]
                     assert tsr0 is not None
                 for ki in range(args.steps):
@@ -163,7 +165,7 @@ def main() -> None:
             if np.mean((tsr0[..., -1] - tsr[..., -1]) ** 2) < np.mean(
                 (tsr0[..., -1] - tsr[..., 0]) ** 2
             ):
-                ## reverse time direction for better alignment
+                # reverse time direction for better alignment
                 tsr = tsr[..., ::-1]
 
             for ki in range(args.steps):
@@ -175,17 +177,21 @@ def main() -> None:
         print("You should either provide both --im and --bgr, or --video.")
 
 
-def run_defmo(config, I, B, rendering, encoder, steps, device) -> np.ndarray:
+def run_defmo(
+    config, im, bgr, rendering, encoder, steps, device
+) -> np.ndarray:
     preprocess = get_transform()
-    bbox, radius = fmo_detect_maxarea(I, B, maxarea=0.03)
+    bbox, radius = fmo_detect_maxarea(im, bgr, maxarea=0.03)
     bbox = extend_bbox(
         bbox.copy(),
         4 * np.max(radius),
         config.resolution_y / config.resolution_x,
-        I.shape,
+        im.shape,
     )
-    im_crop = crop_resize(I, bbox, (config.resolution_x, config.resolution_y))
-    bgr_crop = crop_resize(B, bbox, (config.resolution_x, config.resolution_y))
+    im_crop = crop_resize(im, bbox, (config.resolution_x, config.resolution_y))
+    bgr_crop = crop_resize(
+        bgr, bbox, (config.resolution_x, config.resolution_y)
+    )
     input_batch = (
         torch.cat((preprocess(im_crop), preprocess(bgr_crop)), 0)
         .to(device)
@@ -198,7 +204,7 @@ def run_defmo(config, I, B, rendering, encoder, steps, device) -> np.ndarray:
         renders = rendering(latent, times[None])
     renders_rgba = renders[0].data.cpu().detach().numpy().transpose(2, 3, 1, 0)
     tsr_crop = rgba2hs(renders_rgba, bgr_crop)
-    tsr = rev_crop_resize(tsr_crop, bbox, B.copy())
+    tsr = rev_crop_resize(tsr_crop, bbox, bgr.copy())
     tsr[tsr > 1] = 1
     tsr[tsr < 0] = 0
     return tsr
