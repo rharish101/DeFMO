@@ -1,9 +1,11 @@
+from typing import Tuple
+
 import cv2
 import numpy as np
 from skimage.measure import label, regionprops
 
 
-def imread(name):
+def imread(name: str) -> np.ndarray:
     img = cv2.imread(name, cv2.IMREAD_UNCHANGED)
     if img.shape[2] == 3:
         return img[:, :, [2, 1, 0]] / 255
@@ -11,13 +13,15 @@ def imread(name):
         return img[:, :, [2, 1, 0, 3]] / 65535
 
 
-def imwrite(im, name):
+def imwrite(im: np.ndarray, name: str) -> None:
     im[im < 0] = 0
     im[im > 1] = 1
     cv2.imwrite(name, im[:, :, [2, 1, 0]] * 255)
 
 
-def fmo_detect_maxarea(im, bgr, maxarea=0.1):
+def fmo_detect_maxarea(
+    im: np.ndarray, bgr: np.ndarray, maxarea: float = 0.1
+) -> Tuple[np.ndarray, float]:
     # simulate FMO detector -> find approximate location of FMO
     dI = (np.sum(np.abs(im - bgr), 2) > maxarea).astype(float)
     labeled = label(dI)
@@ -29,12 +33,17 @@ def fmo_detect_maxarea(im, bgr, maxarea=0.1):
             ind = ki
             maxarea = regions[ki].area
     if ind == -1:
-        return [], 0
+        return np.array([]), 0
     bbox = np.array(regions[ind].bbox).astype(int)
     return bbox, regions[ind].minor_axis_length
 
 
-def extend_bbox(bbox, ext, aspect_ratio, shp):
+def extend_bbox(
+    bbox: np.ndarray,
+    ext: float,
+    aspect_ratio: float,
+    shp: Tuple[int, ...],
+) -> np.ndarray:
     height, width = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     h2 = height + ext
@@ -57,15 +66,15 @@ def extend_bbox(bbox, ext, aspect_ratio, shp):
     return bbox
 
 
-def rgba2hs(rgba, bgr):
+def rgba2hs(rgba: np.ndarray, bgr: np.ndarray) -> np.ndarray:
     return rgba[:, :, :3] * rgba[:, :, 3:] + bgr[:, :, :, None] * (
         1 - rgba[:, :, 3:]
     )
 
 
-def crop_resize(Is, bbox, res):
-    if Is is None:
-        return None
+def crop_resize(
+    Is: np.ndarray, bbox: np.ndarray, res: Tuple[int, int]
+) -> np.ndarray:
     rev_axis = False
     if len(Is.shape) == 3:
         rev_axis = True
@@ -79,7 +88,9 @@ def crop_resize(Is, bbox, res):
     return imr
 
 
-def rev_crop_resize(inp, bbox, im):
+def rev_crop_resize(
+    inp: np.ndarray, bbox: np.ndarray, im: np.ndarray
+) -> np.ndarray:
     est_hs = np.tile(im.copy()[:, :, :, np.newaxis], (1, 1, 1, inp.shape[3]))
     for hsk in range(inp.shape[3]):
         est_hs[bbox[0] : bbox[2], bbox[1] : bbox[3], :, hsk] = cv2.resize(

@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 
-from config import load_config
+from config import Config, load_config
 from dataloaders.loader import get_transform
 from models.encoder import EncoderCNN
 from models.rendering import RenderingCNN
@@ -178,7 +178,13 @@ def main() -> None:
 
 
 def run_defmo(
-    config, im, bgr, rendering, encoder, steps, device
+    config: Config,
+    im: np.ndarray,
+    bgr: np.ndarray,
+    rendering: torch.nn.Module,
+    encoder: torch.nn.Module,
+    steps: int,
+    device: torch.device,
 ) -> np.ndarray:
     preprocess = get_transform()
     bbox, radius = fmo_detect_maxarea(im, bgr, maxarea=0.03)
