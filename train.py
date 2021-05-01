@@ -259,7 +259,7 @@ def main(args: Namespace) -> None:
             joint_losses.append(jloss.item())
 
             global_step = epoch * len(training_generator) + it + 1
-            if global_step % 200 == 0:
+            if global_step % args.log_steps == 0:
                 encoder.eval()
                 rendering.eval()
                 if config.use_gan_loss:
@@ -503,5 +503,11 @@ if __name__ == "__main__":
         type=int,
         default=6,
         help="The number of workers for loading the input",
+    )
+    parser.add_argument(
+        "--log-steps",
+        type=int,
+        default=200,
+        help="step interval for logging summaries",
     )
     main(parser.parse_args())
