@@ -34,23 +34,20 @@ def main(args: Namespace) -> None:
 
     l_temp_root = args.run_folder
     if args.finetune_folder is not None:
-        encoder.load_state_dict(
-            torch.load(args.finetune_folder / "encoder.pt")
-        )
-        rendering.load_state_dict(
-            torch.load(args.finetune_folder / "rendering.pt")
-        )
+        finetune_folder = args.finetune_folder.expanduser()
+        encoder.load_state_dict(torch.load(finetune_folder / "encoder.pt"))
+        rendering.load_state_dict(torch.load(finetune_folder / "rendering.pt"))
         if config.use_gan_loss:
             discriminator.load_state_dict(
-                torch.load(args.finetune_folder / "discriminator.pt")
+                torch.load(finetune_folder / "discriminator.pt")
             )
         if config.use_gan_timeconsistency:
             temp_disc.load_state_dict(
-                torch.load(args.finetune_folder / "temp_disc.pt")
+                torch.load(finetune_folder / "temp_disc.pt")
             )
 
         if args.append_logs:
-            l_temp_root = args.finetune_folder
+            l_temp_root = finetune_folder
 
     l_temp_folder = l_temp_root / (datetime.now().isoformat() + "_defmotest")
 
