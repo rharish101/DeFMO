@@ -32,7 +32,9 @@ def main(args: Namespace) -> None:
     if config.use_gan_timeconsistency:
         temp_disc = TemporalDiscriminator()
 
-    l_temp_root = args.run_folder
+    l_temp_folder = args.run_folder / (
+        datetime.now().isoformat() + "_defmotest"
+    )
     if args.finetune_folder is not None:
         finetune_folder = args.finetune_folder.expanduser()
         encoder.load_state_dict(torch.load(finetune_folder / "encoder.pt"))
@@ -47,9 +49,7 @@ def main(args: Namespace) -> None:
             )
 
         if args.append_logs:
-            l_temp_root = finetune_folder
-
-    l_temp_folder = l_temp_root / (datetime.now().isoformat() + "_defmotest")
+            l_temp_folder = finetune_folder
 
     encoder = torch.nn.DataParallel(encoder).to(device)
     rendering = torch.nn.DataParallel(rendering).to(device)
