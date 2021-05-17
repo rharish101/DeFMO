@@ -259,183 +259,192 @@ def main(args: Namespace) -> None:
             if global_step % args.log_steps == 0:
                 encoder.eval()
                 rendering.eval()
-                if config.use_gan_loss:
-                    discriminator.eval()
-                if config.use_gan_timeconsistency:
-                    temp_disc.eval()
 
-                writer.add_scalar(
-                    "Loss/train_joint", np.mean(joint_losses), global_step
-                )
-                print("Epoch {:4d}, it {:4d}".format(epoch + 1, it), end=" ")
-
-                if config.use_supervised:
+                with torch.no_grad():
                     writer.add_scalar(
-                        "Loss/train_supervised",
-                        np.mean(supervised_loss),
-                        global_step,
-                    )
-                    print(f", loss {np.mean(supervised_loss):.3f}", end=" ")
-                if config.use_selfsupervised_model:
-                    writer.add_scalar(
-                        "Loss/train_selfsupervised_model",
-                        np.mean(model_losses),
-                        global_step,
-                    )
-                    print(f", model {np.mean(model_losses):.3f}", end=" ")
-                if config.use_selfsupervised_sharp_mask:
-                    writer.add_scalar(
-                        "Loss/train_selfsupervised_sharpness",
-                        np.mean(sharp_losses),
-                        global_step,
-                    )
-                    print(f", sharp {np.mean(sharp_losses):.3f}", end=" ")
-                if config.use_selfsupervised_timeconsistency:
-                    writer.add_scalar(
-                        "Loss/train_selfsupervised_timeconsistency",
-                        np.mean(timecons_losses),
-                        global_step,
-                    )
-                    print(f", time {np.mean(timecons_losses):.3f}", end=" ")
-                if config.use_latent_learning:
-                    writer.add_scalar(
-                        "Loss/train_selfsupervised_latent",
-                        np.mean(latent_losses),
-                        global_step,
-                    )
-                    print(f", latent {np.mean(latent_losses):.3f}", end=" ")
-                if config.use_gan_loss:
-                    writer.add_scalar(
-                        "Loss/train_gan_generator",
-                        np.mean(gen_losses),
-                        global_step,
-                    )
-                    writer.add_scalar(
-                        "Loss/train_gan_discriminator",
-                        np.mean(disc_losses),
-                        global_step,
-                    )
-                    print(f", gen {np.mean(gen_losses):.3f}", end=" ")
-                    print(f", disc {np.mean(disc_losses):.3f}", end=" ")
-                if config.use_gan_timeconsistency:
-                    writer.add_scalar(
-                        "Loss/train_temp_gan_generator",
-                        np.mean(temp_gen_losses),
-                        global_step,
-                    )
-                    writer.add_scalar(
-                        "Loss/train_temp_gan_discriminator",
-                        np.mean(temp_disc_losses),
-                        global_step,
+                        "Loss/train_joint", np.mean(joint_losses), global_step
                     )
                     print(
-                        f", temp_gen {np.mean(temp_gen_losses):.3f}", end=" "
+                        "Epoch {:4d}, it {:4d}".format(epoch + 1, it), end=" "
                     )
+
+                    if config.use_supervised:
+                        writer.add_scalar(
+                            "Loss/train_supervised",
+                            np.mean(supervised_loss),
+                            global_step,
+                        )
+                        print(
+                            f", loss {np.mean(supervised_loss):.3f}", end=" "
+                        )
+                    if config.use_selfsupervised_model:
+                        writer.add_scalar(
+                            "Loss/train_selfsupervised_model",
+                            np.mean(model_losses),
+                            global_step,
+                        )
+                        print(f", model {np.mean(model_losses):.3f}", end=" ")
+                    if config.use_selfsupervised_sharp_mask:
+                        writer.add_scalar(
+                            "Loss/train_selfsupervised_sharpness",
+                            np.mean(sharp_losses),
+                            global_step,
+                        )
+                        print(f", sharp {np.mean(sharp_losses):.3f}", end=" ")
+                    if config.use_selfsupervised_timeconsistency:
+                        writer.add_scalar(
+                            "Loss/train_selfsupervised_timeconsistency",
+                            np.mean(timecons_losses),
+                            global_step,
+                        )
+                        print(
+                            f", time {np.mean(timecons_losses):.3f}", end=" "
+                        )
+                    if config.use_latent_learning:
+                        writer.add_scalar(
+                            "Loss/train_selfsupervised_latent",
+                            np.mean(latent_losses),
+                            global_step,
+                        )
+                        print(
+                            f", latent {np.mean(latent_losses):.3f}", end=" "
+                        )
+                    if config.use_gan_loss:
+                        writer.add_scalar(
+                            "Loss/train_gan_generator",
+                            np.mean(gen_losses),
+                            global_step,
+                        )
+                        writer.add_scalar(
+                            "Loss/train_gan_discriminator",
+                            np.mean(disc_losses),
+                            global_step,
+                        )
+                        print(f", gen {np.mean(gen_losses):.3f}", end=" ")
+                        print(f", disc {np.mean(disc_losses):.3f}", end=" ")
+                    if config.use_gan_timeconsistency:
+                        writer.add_scalar(
+                            "Loss/train_temp_gan_generator",
+                            np.mean(temp_gen_losses),
+                            global_step,
+                        )
+                        writer.add_scalar(
+                            "Loss/train_temp_gan_discriminator",
+                            np.mean(temp_disc_losses),
+                            global_step,
+                        )
+                        print(
+                            f", temp_gen {np.mean(temp_gen_losses):.3f}",
+                            end=" ",
+                        )
+                        print(
+                            f", temp_disc {np.mean(temp_disc_losses):.3f}",
+                            end=" ",
+                        )
+
+                    print(f", joint {np.mean(joint_losses):.3f}")
+
+                    writer.add_scalar(
+                        "LR/value",
+                        optimizer.param_groups[0]["lr"],
+                        global_step,
+                    )
+                    writer.add_images(
+                        "Vis Train Batch",
+                        get_images(
+                            encoder, rendering, device, vis_train_batch
+                        )[0],
+                        global_step,
+                    )
+                    writer.add_images(
+                        "Vis Val Batch",
+                        get_images(encoder, rendering, device, vis_val_batch)[
+                            0
+                        ],
+                        global_step,
+                    )
+
+                    running_losses_min = []
+                    running_losses_max = []
+                    for it, (input_batch, times, hs_frames, _) in enumerate(
+                        val_generator
+                    ):
+                        input_batch, times, hs_frames = (
+                            input_batch.to(device),
+                            times.to(device),
+                            hs_frames.to(device),
+                        )
+                        latent = encoder(input_batch)
+                        renders = rendering(latent, times)[:, :, :4]
+
+                        val_loss1 = fmo_loss(renders, hs_frames)
+                        val_loss2 = fmo_loss(
+                            renders, torch.flip(hs_frames, [1])
+                        )
+                        losses = torch.cat(
+                            (val_loss1.unsqueeze(0), val_loss2.unsqueeze(0)), 0
+                        )
+                        min_loss, _ = losses.min(0)
+                        max_loss, _ = losses.max(0)
+                        running_losses_min.append(min_loss.mean().item())
+                        running_losses_max.append(max_loss.mean().item())
                     print(
-                        f", temp_disc {np.mean(temp_disc_losses):.3f}", end=" "
+                        "Step {:4d}, val it {:4d}, loss {}".format(
+                            global_step, it, np.mean(running_losses_min)
+                        )
                     )
+                    val_losses.append(np.mean(running_losses_min))
+                    if val_losses[-1] < best_val_loss and epoch >= 0:
+                        torch.save(
+                            encoder.module.state_dict(),
+                            l_temp_folder / "encoder_best.pt",
+                        )
+                        torch.save(
+                            rendering.module.state_dict(),
+                            l_temp_folder / "rendering_best.pt",
+                        )
+                        if config.use_gan_loss:
+                            torch.save(
+                                discriminator.module.state_dict(),
+                                l_temp_folder / "discriminator_best.pt",
+                            )
+                        if config.use_gan_timeconsistency:
+                            torch.save(
+                                temp_disc.module.state_dict(),
+                                l_temp_folder / "temp_disc_best.pt",
+                            )
+                        best_val_loss = float(val_losses[-1])
+                        print("    Saving best validation loss model!  ")
 
-                print(f", joint {np.mean(joint_losses):.3f}")
-
-                writer.add_scalar(
-                    "LR/value", optimizer.param_groups[0]["lr"], global_step
-                )
-                writer.add_images(
-                    "Vis Train Batch",
-                    get_images(encoder, rendering, device, vis_train_batch)[0],
-                    global_step,
-                )
-                writer.add_images(
-                    "Vis Val Batch",
-                    get_images(encoder, rendering, device, vis_val_batch)[0],
-                    global_step,
-                )
-                writer.flush()
+                    writer.add_scalar(
+                        "Loss/val_min", val_losses[-1], global_step
+                    )
+                    writer.add_scalar(
+                        "Loss/val_max",
+                        np.mean(running_losses_max),
+                        global_step,
+                    )
+                    concat = torch.cat(
+                        (
+                            renders[:, 0],
+                            renders[:, -1],
+                            hs_frames[:, 0],
+                            hs_frames[:, -1],
+                        ),
+                        2,
+                    )
+                    writer.add_images(
+                        "Val Batch",
+                        concat[:, 3:] * (concat[:, :3] - 1) + 1,
+                        global_step,
+                    )
+                    writer.flush()
 
             optimizer.zero_grad()
             jloss.backward()
             optimizer.step()
 
         train_losses.append(np.mean(supervised_loss))
-
-        with torch.no_grad():
-            encoder.eval()
-            rendering.eval()
-            if config.use_gan_loss:
-                discriminator.eval()
-            if config.use_gan_timeconsistency:
-                temp_disc.eval()
-
-            running_losses_min = []
-            running_losses_max = []
-            for it, (input_batch, times, hs_frames, _) in enumerate(
-                val_generator
-            ):
-                input_batch, times, hs_frames = (
-                    input_batch.to(device),
-                    times.to(device),
-                    hs_frames.to(device),
-                )
-                latent = encoder(input_batch)
-                renders = rendering(latent, times)[:, :, :4]
-
-                val_loss1 = fmo_loss(renders, hs_frames)
-                val_loss2 = fmo_loss(renders, torch.flip(hs_frames, [1]))
-                losses = torch.cat(
-                    (val_loss1.unsqueeze(0), val_loss2.unsqueeze(0)), 0
-                )
-                min_loss, _ = losses.min(0)
-                max_loss, _ = losses.max(0)
-                running_losses_min.append(min_loss.mean().item())
-                running_losses_max.append(max_loss.mean().item())
-            print(
-                "Epoch {:4d}, val it {:4d}, loss {}".format(
-                    epoch + 1, it, np.mean(running_losses_min)
-                )
-            )
-            val_losses.append(np.mean(running_losses_min))
-            if val_losses[-1] < best_val_loss and epoch >= 0:
-                torch.save(
-                    encoder.module.state_dict(),
-                    l_temp_folder / "encoder_best.pt",
-                )
-                torch.save(
-                    rendering.module.state_dict(),
-                    l_temp_folder / "rendering_best.pt",
-                )
-                if config.use_gan_loss:
-                    torch.save(
-                        discriminator.module.state_dict(),
-                        l_temp_folder / "discriminator_best.pt",
-                    )
-                if config.use_gan_timeconsistency:
-                    torch.save(
-                        temp_disc.module.state_dict(),
-                        l_temp_folder / "temp_disc_best.pt",
-                    )
-                best_val_loss = float(val_losses[-1])
-                print("    Saving best validation loss model!  ")
-
-            global_step = (epoch + 1) * len(training_generator)
-            writer.add_scalar("Loss/val_min", val_losses[-1], global_step)
-            writer.add_scalar(
-                "Loss/val_max", np.mean(running_losses_max), global_step
-            )
-            concat = torch.cat(
-                (
-                    renders[:, 0],
-                    renders[:, -1],
-                    hs_frames[:, 0],
-                    hs_frames[:, -1],
-                ),
-                2,
-            )
-            writer.add_images(
-                "Val Batch",
-                concat[:, 3:] * (concat[:, :3] - 1) + 1,
-                global_step,
-            )
-            writer.flush()
 
         time_elapsed = (time.time() - t0) / 60
         print(
