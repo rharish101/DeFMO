@@ -58,13 +58,8 @@ class TemporalDiscriminator(nn.Module):
         layers[0].weight.data[:, :3, :, :] = nn.Parameter(pretrained_weights)
         layers[0].weight.data[:, 4:7, :, :] = nn.Parameter(pretrained_weights)
 
-        combine = nn.Sequential(
-            nn.Conv2d(512, 1, kernel_size=(1, 1), bias=False),
-            nn.BatchNorm2d(1),
-            nn.ReLU(inplace=True),
-        )
-
-        net = nn.Sequential(*layers[:-2], combine, layers[-2])
+        classify = nn.Linear(512, 1)
+        net = nn.Sequential(*layers[:-1], nn.Flatten(), classify)
         self.net = spectralize(net)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
