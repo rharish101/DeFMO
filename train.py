@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """The main training script."""
+from __future__ import annotations
+
 import time
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from dataclasses import dataclass
@@ -35,7 +37,7 @@ class _Losses:
     disc: torch.Tensor = 0.0
     temp_nn: torch.Tensor = 0.0
 
-    def __truediv__(self, scalar: float) -> "_Losses":
+    def __truediv__(self, scalar: float) -> _Losses:
         return _Losses(
             **{key: value / scalar for key, value in vars(self).items()}
         )
