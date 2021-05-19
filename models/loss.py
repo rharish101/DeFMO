@@ -137,19 +137,18 @@ class GANLoss(nn.Module):
             raise Exception("Unexpected reduction {}".format(self.reduction))
 
 
-class TemporalGANLoss(nn.Module):
+class TemporalNNLoss(nn.Module):
     def __init__(self, config: Config, reduction: str = "none"):
         super().__init__()
         self.config = config
-        self.reduction = reduction
+        self.loss_fn = nn.BCEWithLogitsLoss(reduction=reduction)
 
     def forward(
         self, renders: torch.Tensor, discriminator: nn.Module
     ) -> torch.Tensor:
         renders = renders[:, : self.config.fmo_train_steps, :4]
 
-        gen_loss = 0.0
-        disc_loss = 0.0
+        loss = 0.0
 
         for frame_num in range(self.config.fmo_train_steps - 1):
             # Offset from the current index
@@ -163,17 +162,16 @@ class TemporalGANLoss(nn.Module):
                 (renders[:, frame_num], renders[:, choice]), 1
             )
 
-            losses = gan_loss(incorrect, correct, discriminator)
-            gen_loss += losses[0]
-            disc_loss += losses[1]
+            correct_out = discriminator(correct)
+            incorrect_out = discriminator(incorrect)
+            loss += self.loss_fn(
+                incorrect_out, torch.zeros_like(incorrect_out)
+            )
+            loss += self.loss_fn(correct_out, torch.ones_like(correct_out))
 
-        gen_loss = gen_loss / self.config.fmo_train_steps
-        disc_loss = disc_loss / self.config.fmo_train_steps
+        loss /= self.config.fmo_train_steps - 1
 
-        if self.reduction == "none":
-            return gen_loss, disc_loss
-        else:
-            raise Exception("Unexpected reduction {}".format(self.reduction))
+        return loss
 
 
 def oflow_loss(renders: torch.Tensor) -> torch.Tensor:

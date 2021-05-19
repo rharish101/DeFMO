@@ -13,7 +13,7 @@ from config import load_config
 from dataloaders.loader import ShapeBlurDataset, get_training_sample
 from models.discriminator import Discriminator, TemporalDiscriminator
 from models.encoder import EncoderCNN
-from models.loss import FMOLoss, GANLoss, TemporalGANLoss, fmo_loss
+from models.loss import FMOLoss, GANLoss, TemporalNNLoss, fmo_loss
 from models.rendering import RenderingCNN
 from utils import get_images
 
@@ -29,7 +29,7 @@ def main(args: Namespace) -> None:
 
     if config.use_gan_loss:
         discriminator = Discriminator()
-    if config.use_gan_timeconsistency:
+    if config.use_nn_timeconsistency:
         temp_disc = TemporalDiscriminator()
 
     l_temp_folder = args.run_folder / (
@@ -43,7 +43,7 @@ def main(args: Namespace) -> None:
             discriminator.load_state_dict(
                 torch.load(finetune_folder / "discriminator.pt")
             )
-        if config.use_gan_timeconsistency:
+        if config.use_nn_timeconsistency:
             temp_disc.load_state_dict(
                 torch.load(finetune_folder / "temp_disc.pt")
             )
@@ -57,9 +57,9 @@ def main(args: Namespace) -> None:
     if config.use_gan_loss:
         discriminator = torch.nn.DataParallel(discriminator).to(device)
         gan_loss_function = GANLoss(config)
-    if config.use_gan_timeconsistency:
+    if config.use_nn_timeconsistency:
         temp_disc = torch.nn.DataParallel(temp_disc).to(device)
-        temp_gan_function = TemporalGANLoss(config)
+        temp_nn_function = TemporalNNLoss(config)
 
     if not l_temp_folder.exists():
         l_temp_folder.mkdir(parents=True)
@@ -85,7 +85,7 @@ def main(args: Namespace) -> None:
         print(
             ", discriminator params {:2f}M".format(disc_params / 1e6), end=""
         )
-    if config.use_gan_timeconsistency:
+    if config.use_nn_timeconsistency:
         temp_disc_params = sum(p.numel() for p in temp_disc.parameters())
         print(
             ", temporal discriminator params {:2f}M".format(
@@ -156,7 +156,7 @@ def main(args: Namespace) -> None:
         )
         for _ in range(args.start_epoch):
             disc_scheduler.step()
-    if config.use_gan_timeconsistency:
+    if config.use_nn_timeconsistency:
         temp_disc_optimizer = torch.optim.Adam(
             temp_disc.parameters(), lr=config.temp_disc_lr
         )
@@ -179,9 +179,8 @@ def main(args: Namespace) -> None:
         if config.use_gan_loss:
             gen_losses = []
             disc_losses = []
-        if config.use_gan_timeconsistency:
-            temp_gen_losses = []
-            temp_disc_losses = []
+        if config.use_nn_timeconsistency:
+            temp_nn_losses = []
         joint_losses = []
         for it, (input_batch, times, hs_frames, times_left) in enumerate(
             training_generator
@@ -190,7 +189,7 @@ def main(args: Namespace) -> None:
             rendering.train()
             if config.use_gan_loss:
                 discriminator.train()
-            if config.use_gan_timeconsistency:
+            if config.use_nn_timeconsistency:
                 temp_disc.train()
 
             input_batch, times, hs_frames, times_left = (
@@ -226,19 +225,17 @@ def main(args: Namespace) -> None:
                 )
                 jloss += config.gan_wt * gen_loss
 
-            if config.use_gan_timeconsistency:
+            if config.use_nn_timeconsistency:
                 for _ in range(config.temp_disc_steps):
                     temp_disc_optimizer.zero_grad()
-                    temp_disc_loss = temp_gan_function(
+                    temp_nn_loss = temp_nn_function(
                         renders.detach(), temp_disc
-                    )[1]
-                    temp_disc_loss.mean().backward()
+                    )
+                    temp_nn_loss.mean().backward()
                     temp_disc_optimizer.step()
 
-                temp_gen_loss, temp_disc_loss = temp_gan_function(
-                    renders, temp_disc
-                )
-                jloss += config.temp_gan_wt * temp_gen_loss
+                temp_nn_loss = temp_nn_function(renders, temp_disc)
+                jloss += config.temp_nn_wt * temp_nn_loss
 
             supervised_loss.append(sloss.mean().item())
             model_losses.append(mloss.mean().item())
@@ -248,9 +245,8 @@ def main(args: Namespace) -> None:
             if config.use_gan_loss:
                 gen_losses.append(gen_loss.mean().item())
                 disc_losses.append(disc_loss.mean().item())
-            if config.use_gan_timeconsistency:
-                temp_gen_losses.append(temp_gen_loss.mean().item())
-                temp_disc_losses.append(temp_disc_loss.mean().item())
+            if config.use_nn_timeconsistency:
+                temp_nn_losses.append(temp_nn_loss.mean().item())
 
             jloss = jloss.mean()
             joint_losses.append(jloss.item())
@@ -322,24 +318,14 @@ def main(args: Namespace) -> None:
                         )
                         print(f", gen {np.mean(gen_losses):.3f}", end=" ")
                         print(f", disc {np.mean(disc_losses):.3f}", end=" ")
-                    if config.use_gan_timeconsistency:
+                    if config.use_nn_timeconsistency:
                         writer.add_scalar(
-                            "Loss/train_temp_gan_generator",
-                            np.mean(temp_gen_losses),
-                            global_step,
-                        )
-                        writer.add_scalar(
-                            "Loss/train_temp_gan_discriminator",
-                            np.mean(temp_disc_losses),
+                            "Loss/train_temp_nn",
+                            np.mean(temp_nn_losses),
                             global_step,
                         )
                         print(
-                            f", temp_gen {np.mean(temp_gen_losses):.3f}",
-                            end=" ",
-                        )
-                        print(
-                            f", temp_disc {np.mean(temp_disc_losses):.3f}",
-                            end=" ",
+                            f", temp_nn {np.mean(temp_nn_losses):.3f}", end=" "
                         )
 
                     print(f", joint {np.mean(joint_losses):.3f}")
@@ -408,7 +394,7 @@ def main(args: Namespace) -> None:
                                 discriminator.module.state_dict(),
                                 l_temp_folder / "discriminator_best.pt",
                             )
-                        if config.use_gan_timeconsistency:
+                        if config.use_nn_timeconsistency:
                             torch.save(
                                 temp_disc.module.state_dict(),
                                 l_temp_folder / "temp_disc_best.pt",
@@ -456,7 +442,7 @@ def main(args: Namespace) -> None:
         scheduler.step()
         if config.use_gan_loss:
             disc_scheduler.step()
-        if config.use_gan_timeconsistency:
+        if config.use_nn_timeconsistency:
             temp_disc_scheduler.step()
 
     torch.cuda.empty_cache()
@@ -467,7 +453,7 @@ def main(args: Namespace) -> None:
             discriminator.module.state_dict(),
             l_temp_folder / "discriminator.pt",
         )
-    if config.use_gan_timeconsistency:
+    if config.use_nn_timeconsistency:
         torch.save(
             temp_disc.module.state_dict(), l_temp_folder / "temp_disc.pt"
         )

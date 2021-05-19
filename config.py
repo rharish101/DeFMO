@@ -88,7 +88,7 @@ class Config:
     use_supervised: bool = True
     use_latent_learning: bool = False
     use_gan_loss: bool = True
-    use_gan_timeconsistency: bool = False
+    use_nn_timeconsistency: bool = False
 
     lr: float = 1e-3
     disc_lr: float = 1e-5
@@ -96,7 +96,7 @@ class Config:
     sched_step_size: int = 10
 
     gan_wt: float = 1.0
-    temp_gan_wt: float = 0.1
+    temp_nn_wt: float = 0.1
     disc_steps: int = 1
     temp_disc_steps: int = 1
 
