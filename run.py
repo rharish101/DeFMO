@@ -158,7 +158,7 @@ class Runner:
         bgr: np.ndarray,
         steps: int,
     ) -> np.ndarray:
-        preprocess = get_transform()
+        preprocess = get_transform(self.config.normalize)
         bbox, radius = fmo_detect_maxarea(im, bgr, maxarea=0.03)
         bbox = extend_bbox(
             bbox.copy(),
