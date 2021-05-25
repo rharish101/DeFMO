@@ -90,7 +90,7 @@ class Trainer:
         self, train_folder: Path, val_folder: Path, num_workers: int
     ) -> None:
         train_dataset = ShapeBlurDataset(
-            dataset_folder=train_folder,
+            dataset_folder=train_folder.expanduser(),
             config=self.config,
             render_objs=self.config.render_objs_train,
             number_per_category=self.config.number_per_category,
@@ -105,7 +105,7 @@ class Trainer:
             drop_last=True,
         )
         val_dataset = ShapeBlurDataset(
-            dataset_folder=val_folder,
+            dataset_folder=val_folder.expanduser(),
             config=self.config,
             render_objs=self.config.render_objs_val,
             number_per_category=self.config.number_per_category_val,
@@ -132,9 +132,11 @@ class Trainer:
     def _init_logging(
         self, save_folder: Path, load_folder: Optional[Path], append_logs: bool
     ) -> None:
-        self.save_folder = save_folder / datetime.now().isoformat()
+        self.save_folder = (
+            save_folder.expanduser() / datetime.now().isoformat()
+        )
         if load_folder is not None and append_logs:
-            self.save_folder = load_folder
+            self.save_folder = load_folder.expanduser()
 
         if not self.save_folder.exists():
             self.save_folder.mkdir(parents=True)
