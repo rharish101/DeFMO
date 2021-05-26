@@ -283,14 +283,15 @@ class Trainer:
 
         best_val_loss = float("inf")
         running_losses = _Losses()
+        global_step = start_epoch * len(self.train_generator) + 1
 
         for epoch in range(start_epoch, self.config.epochs):
             t0 = time.time()
 
             for it, inputs in enumerate(self.train_generator):
                 running_losses = self._train_step(inputs, running_losses)
+                global_step += 1
 
-                global_step = epoch * len(self.train_generator) + it + 1
                 if global_step % log_steps == 0:
                     curr_val_loss = self.save_logs(
                         global_step, running_losses / log_steps
