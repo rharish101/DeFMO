@@ -272,10 +272,13 @@ class Trainer:
             )
 
     def train(
-        self, log_steps: int, save_steps: int, start_epoch: int = 0
+        self, log_steps: int, save_steps: int, start_step: int = 0
     ) -> None:
         """Train the models."""
         # Advance the schedulers to match their state in the previous run
+        start_epoch = start_step // len(self.train_generator)
+        skip_steps = start_step % len(self.train_generator)
+
         for _ in range(start_epoch):
             self.model_sched.step()
             if self.config.use_gan_loss:
@@ -285,12 +288,15 @@ class Trainer:
 
         best_val_loss = float("inf")
         running_losses = _Losses()
-        global_step = start_epoch * len(self.train_generator) + 1
+        global_step = start_step
 
         for epoch in range(start_epoch, self.config.epochs):
             t0 = time.time()
 
             for it, inputs in enumerate(self.train_generator):
+                if epoch == start_epoch and it < skip_steps:
+                    continue
+
                 running_losses = self._train_step(inputs, running_losses)
                 global_step += 1
 
@@ -527,13 +533,13 @@ def main(args: Namespace) -> None:
         val_folder,
         args.num_workers,
         args.run_folder,
-        load_folder=args.finetune_folder,
+        load_folder=args.continue_folder,
         append_logs=args.append_logs,
     )
     trainer.train(
         log_steps=args.log_steps,
         save_steps=args.save_steps,
-        start_epoch=args.start_epoch,
+        start_step=args.continue_step,
     )
 
 
@@ -554,13 +560,16 @@ if __name__ == "__main__":
         "--config", type=Path, help="Path to the TOML hyper-param config"
     )
     parser.add_argument(
-        "--finetune-folder",
+        "--continue-folder",
         type=Path,
-        help="Path to the folder from where saved models should be loaded for "
-        "fine-tuning",
+        help="Path to the folder from where saved models should be loaded to "
+        "continue training",
     )
     parser.add_argument(
-        "--start-epoch", type=int, default=0, help="The epoch to start from"
+        "--continue-step",
+        type=int,
+        default=0,
+        help="The step to continue training from",
     )
     parser.add_argument(
         "--append-logs",
