@@ -234,19 +234,21 @@ class Trainer:
         """Load weights from a previous checkpoint."""
         load_folder = load_folder.expanduser()
 
-        self.encoder.load_state_dict(torch.load(load_folder / "encoder.pt"))
+        self.encoder.load_state_dict(
+            torch.load(load_folder / f"{self.ENC_PREFIX}.pt")
+        )
         self.rendering.load_state_dict(
-            torch.load(load_folder / "rendering.pt")
+            torch.load(load_folder / f"{self.RENDER_PREFIX}.pt")
         )
 
         if self.config.use_gan_loss:
             self.discriminator.load_state_dict(
-                torch.load(load_folder / "discriminator.pt")
+                torch.load(load_folder / f"{self.DISC_PREFIX}.pt")
             )
 
         if self.config.use_nn_timeconsistency:
             self.temp_disc.load_state_dict(
-                torch.load(load_folder / "temp_disc.pt")
+                torch.load(load_folder / f"{self.TEMP_DISC_PREFIX}.pt")
             )
 
     def save_weights(self, save_best: bool = False) -> None:
