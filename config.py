@@ -84,11 +84,11 @@ class Config:
 
     use_selfsupervised_model: bool = True
     use_selfsupervised_sharp_mask: bool = False
-    use_selfsupervised_timeconsistency: bool = True
+    use_selfsupervised_timeconsistency: bool = False
     use_supervised: bool = True
     use_latent_learning: bool = False
     use_gan_loss: bool = True
-    use_nn_timeconsistency: bool = False
+    use_nn_timeconsistency: bool = True
 
     lr: float = 1e-3
     disc_lr: float = 1e-5
@@ -96,9 +96,9 @@ class Config:
     sched_step_size: int = 10
 
     gan_wt: float = 1.0
-    temp_nn_wt: float = 0.1
+    temp_nn_wt: float = 0.05
     disc_steps: int = 1
-    temp_disc_steps: int = 1
+    temp_disc_steps: int = 2
 
 
 def load_config(config_path: Optional[Path]) -> Config:
