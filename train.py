@@ -271,7 +271,9 @@ class Trainer:
                 self.save_folder / f"{self.TEMP_DISC_PREFIX}{suffix}",
             )
 
-    def train(self, log_steps: int, start_epoch: int = 0) -> None:
+    def train(
+        self, log_steps: int, save_steps: int, start_epoch: int = 0
+    ) -> None:
         """Train the models."""
         # Advance the schedulers to match their state in the previous run
         for _ in range(start_epoch):
@@ -307,6 +309,9 @@ class Trainer:
                             f"Step {global_step}: Saving best validation loss "
                             "model!"
                         )
+
+                if global_step % save_steps == 0:
+                    self.save_weights()
 
             time_elapsed = (time.time() - t0) / 60
             print(f"Epoch {epoch+1:4d} took {time_elapsed:.2f} minutes")
@@ -525,7 +530,11 @@ def main(args: Namespace) -> None:
         load_folder=args.finetune_folder,
         append_logs=args.append_logs,
     )
-    trainer.train(log_steps=args.log_steps, start_epoch=args.start_epoch)
+    trainer.train(
+        log_steps=args.log_steps,
+        save_steps=args.save_steps,
+        start_epoch=args.start_epoch,
+    )
 
 
 if __name__ == "__main__":
@@ -568,6 +577,12 @@ if __name__ == "__main__":
         "--log-steps",
         type=int,
         default=200,
-        help="step interval for logging summaries",
+        help="Step interval for logging summaries",
+    )
+    parser.add_argument(
+        "--save-steps",
+        type=int,
+        default=200,
+        help="Step interval for saving model weights",
     )
     main(parser.parse_args())
