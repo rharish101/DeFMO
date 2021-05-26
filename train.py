@@ -53,6 +53,13 @@ class Trainer:
     TEMP_DISC_PREFIX: Final = "temp_disc"
     BEST_SUFFIX: Final = "_best"
 
+    # Used when saving training state
+    STATE_PREFIX: Final = "train_state"
+    GLOBAL_STEP_KEY: Final = "global_step"
+    MODEL_OPT_KEY: Final = "model_optim"
+    DISC_OPT_KEY: Final = "disc_optim"
+    TEMP_DISC_OPT_KEY: Final = "temp_disc_optim"
+
     def __init__(
         self,
         config: Config,
@@ -84,7 +91,7 @@ class Trainer:
         self._init_data(train_folder, val_folder, num_workers)
         self._init_logging(save_folder, load_folder, append_logs)
         self._init_models(load_folder)
-        self._init_optimizers()
+        self._init_optimizers(load_folder)
 
     def _init_data(
         self, train_folder: Path, val_folder: Path, num_workers: int
@@ -202,7 +209,7 @@ class Trainer:
             )
         print("")
 
-    def _init_optimizers(self) -> None:
+    def _init_optimizers(self, load_folder: Optional[Path]) -> None:
         model_params = list(self.encoder.parameters()) + list(
             self.rendering.parameters()
         )
@@ -230,6 +237,10 @@ class Trainer:
                 gamma=0.5,
             )
 
+        self.start_step = 0
+        if load_folder is not None:
+            self.load_state(load_folder)
+
     def load_weights(self, load_folder: Path) -> None:
         """Load weights from a previous checkpoint."""
         load_folder = load_folder.expanduser()
@@ -250,6 +261,18 @@ class Trainer:
             self.temp_disc.load_state_dict(
                 torch.load(load_folder / f"{self.TEMP_DISC_PREFIX}.pt")
             )
+
+    def load_state(self, load_folder: Path) -> None:
+        """Load training state from a previous checkpoint."""
+        load_folder = load_folder.expanduser()
+        state = torch.load(load_folder / f"{self.STATE_PREFIX}.pt")
+
+        self.start_step = state[self.GLOBAL_STEP_KEY]
+        self.model_optim.load_state_dict(state[self.MODEL_OPT_KEY])
+        if self.config.use_gan_loss:
+            self.disc_optim.load_state_dict(state[self.DISC_OPT_KEY])
+        if self.config.use_nn_timeconsistency:
+            self.temp_disc_optim.load_state_dict(state[self.TEMP_DISC_OPT_KEY])
 
     def save_weights(self, save_best: bool = False) -> None:
         """Save weights to disk."""
@@ -273,13 +296,26 @@ class Trainer:
                 self.save_folder / f"{self.TEMP_DISC_PREFIX}{suffix}",
             )
 
-    def train(
-        self, log_steps: int, save_steps: int, start_step: int = 0
-    ) -> None:
+    def save_state(self, global_step: int) -> None:
+        """Save training state to disk."""
+        self.save_weights()
+
+        state = {
+            self.GLOBAL_STEP_KEY: global_step,
+            self.MODEL_OPT_KEY: self.model_optim.state_dict(),
+        }
+        if self.config.use_gan_loss:
+            state[self.DISC_OPT_KEY] = self.disc_optim.state_dict()
+        if self.config.use_nn_timeconsistency:
+            state[self.TEMP_DISC_OPT_KEY] = self.temp_disc_optim.state_dict()
+
+        torch.save(state, self.save_folder / f"{self.STATE_PREFIX}.pt")
+
+    def train(self, log_steps: int, save_steps: int) -> None:
         """Train the models."""
         # Advance the schedulers to match their state in the previous run
-        start_epoch = start_step // len(self.train_generator)
-        skip_steps = start_step % len(self.train_generator)
+        start_epoch = self.start_step // len(self.train_generator)
+        skip_steps = self.start_step % len(self.train_generator)
 
         for _ in range(start_epoch):
             self.model_sched.step()
@@ -290,7 +326,7 @@ class Trainer:
 
         best_val_loss = float("inf")
         running_losses = _Losses()
-        global_step = start_step
+        global_step = self.start_step
 
         for epoch in range(start_epoch, self.config.epochs):
             t0 = time.time()
@@ -319,7 +355,7 @@ class Trainer:
                         )
 
                 if global_step % save_steps == 0:
-                    self.save_weights()
+                    self.save_state(global_step)
 
             time_elapsed = (time.time() - t0) / 60
             print(f"Epoch {epoch+1:4d} took {time_elapsed:.2f} minutes")
@@ -330,7 +366,7 @@ class Trainer:
                 self.temp_disc_sched.step()
 
         torch.cuda.empty_cache()
-        self.save_weights()
+        self.save_state(global_step)
         self.writer.close()
 
     def _train_step(
@@ -538,11 +574,7 @@ def main(args: Namespace) -> None:
         load_folder=args.continue_folder,
         append_logs=args.append_logs,
     )
-    trainer.train(
-        log_steps=args.log_steps,
-        save_steps=args.save_steps,
-        start_step=args.continue_step,
-    )
+    trainer.train(log_steps=args.log_steps, save_steps=args.save_steps)
 
 
 if __name__ == "__main__":
@@ -566,12 +598,6 @@ if __name__ == "__main__":
         type=Path,
         help="Path to the folder from where saved models should be loaded to "
         "continue training",
-    )
-    parser.add_argument(
-        "--continue-step",
-        type=int,
-        default=0,
-        help="The step to continue training from",
     )
     parser.add_argument(
         "--append-logs",
