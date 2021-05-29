@@ -3,9 +3,10 @@ import torch.nn as nn
 import torchvision.models
 
 from config import Config
+from utils import CkptModule
 
 
-class RenderingCNN(nn.Module):
+class RenderingCNN(CkptModule):
     def __init__(self, config: Config):
         super().__init__()
         self.net = self.get_model(config)
@@ -66,7 +67,7 @@ class RenderingCNN(nn.Module):
                 .repeat(1, 1, latent.shape[2], latent.shape[3])
             )
             latenti = torch.cat((t_tensor, latent), 1)
-            result = self.net(latenti)
+            result = self.ckpt_run(self.net, 2, latenti)
             renders_list.append(result)
 
         renders = torch.stack(renders_list, 1).contiguous()

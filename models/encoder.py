@@ -2,8 +2,10 @@ import torch.nn as nn
 import torchvision.models
 from torch import Tensor
 
+from utils import CkptModule
 
-class EncoderCNN(nn.Module):
+
+class EncoderCNN(CkptModule):
     def __init__(self) -> None:
         super().__init__()
 
@@ -19,4 +21,4 @@ class EncoderCNN(nn.Module):
         self.net = nn.Sequential(layer_0, *layers[1:3], *layers[4:8])
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return self.net(inputs)
+        return self.ckpt_run(self.net, 2, inputs)

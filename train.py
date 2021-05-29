@@ -388,6 +388,12 @@ class Trainer:
         hs_frames = inputs[2].to(self.device)
         times_left = inputs[3].to(self.device)
 
+        # Needed for gradient checkpointing
+        input_batch.requires_grad = True
+        times.requires_grad = True
+        hs_frames.requires_grad = True
+        times_left.requires_grad = True
+
         if self.config.use_latent_learning:
             latent = self.encoder(input_batch[:, :6])
             latent2 = self.encoder(input_batch[:, 6:])
@@ -426,12 +432,16 @@ class Trainer:
         jloss.backward()
         self.model_optim.step()
 
+        # Needed for gradient checkpointing
+        outputs = renders.detach()
+        outputs.requires_grad = True
+
         if self.config.use_gan_loss:
             self.discriminator.module.unfreeze()
             for _ in range(self.config.disc_steps):
                 self.disc_optim.zero_grad()
                 disc_loss = self.gan_loss_fn(
-                    renders.detach(), hs_frames, self.discriminator
+                    outputs, hs_frames, self.discriminator
                 )[1]
                 disc_loss.mean().backward()
                 self.disc_optim.step()
@@ -440,9 +450,7 @@ class Trainer:
             self.temp_disc.module.unfreeze()
             for _ in range(self.config.temp_disc_steps):
                 self.temp_disc_optim.zero_grad()
-                temp_nn_loss = self.temp_nn_fn(
-                    renders.detach(), self.temp_disc
-                )
+                temp_nn_loss = self.temp_nn_fn(outputs, self.temp_disc)
                 temp_nn_loss.mean().backward()
                 self.temp_disc_optim.step()
 

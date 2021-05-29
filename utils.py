@@ -6,6 +6,17 @@ import torch
 from skimage.measure import label, regionprops
 from torch.nn import Module
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint_sequential
+
+
+class CkptModule(Module):
+    def ckpt_run(
+        self, module: Module, segments: int, inputs: torch.Tensor
+    ) -> torch.Tensor:
+        if self.training:
+            return checkpoint_sequential(module, segments, inputs)
+        else:
+            return module(inputs)
 
 
 def imread(name: str) -> np.ndarray:

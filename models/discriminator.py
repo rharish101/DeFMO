@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.nn.utils import spectral_norm
 from torchvision.models import resnet18
 
+from utils import CkptModule
+
 
 def spectralize(module: nn.Module) -> nn.Module:
     if "weight" in module._parameters:
@@ -12,7 +14,7 @@ def spectralize(module: nn.Module) -> nn.Module:
     return module
 
 
-class _FreezableModule(nn.Module):
+class _FreezableModule(CkptModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._trainable_params = [
@@ -54,7 +56,7 @@ class Discriminator(_FreezableModule):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         noise = torch.randn_like(inputs) * 1e-3
-        return self.net(inputs + noise).flatten()
+        return self.ckpt_run(self.net, 2, inputs + noise).flatten()
 
 
 class TemporalDiscriminator(_FreezableModule):
@@ -81,4 +83,4 @@ class TemporalDiscriminator(_FreezableModule):
         self.net = spectralize(net)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.net(inputs).flatten()
+        return self.ckpt_run(self.net, 2, inputs).flatten()
