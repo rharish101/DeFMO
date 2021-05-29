@@ -12,7 +12,25 @@ def spectralize(module: nn.Module) -> nn.Module:
     return module
 
 
-class Discriminator(nn.Module):
+class _FreezableModule(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._trainable_params = [
+            param for param in self.parameters() if param.requires_grad
+        ]
+
+    def freeze(self) -> None:
+        self.eval()
+        for param in self._trainable_params:
+            param.requires_grad = False
+
+    def unfreeze(self) -> None:
+        self.train()
+        for param in self._trainable_params:
+            param.requires_grad = True
+
+
+class Discriminator(_FreezableModule):
     def __init__(self) -> None:
         super().__init__()
 
@@ -39,7 +57,7 @@ class Discriminator(nn.Module):
         return self.net(inputs + noise).flatten()
 
 
-class TemporalDiscriminator(nn.Module):
+class TemporalDiscriminator(_FreezableModule):
     def __init__(self) -> None:
         super().__init__()
 

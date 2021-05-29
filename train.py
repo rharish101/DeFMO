@@ -378,10 +378,6 @@ class Trainer:
     ) -> _Losses:
         self.encoder.train()
         self.rendering.train()
-        if self.config.use_gan_loss:
-            self.discriminator.train()
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc.train()
 
         input_batch = inputs[0].to(self.device)
         times = inputs[1].to(self.device)
@@ -407,6 +403,7 @@ class Trainer:
         running_losses.latent += lloss.mean().item()
 
         if self.config.use_gan_loss:
+            self.discriminator.module.unfreeze()
             for _ in range(self.config.disc_steps):
                 self.disc_optim.zero_grad()
                 disc_loss = self.gan_loss_fn(
@@ -415,6 +412,7 @@ class Trainer:
                 disc_loss.mean().backward()
                 self.disc_optim.step()
 
+            self.discriminator.module.freeze()
             gen_loss, disc_loss = self.gan_loss_fn(
                 renders, hs_frames, self.discriminator
             )
@@ -423,6 +421,7 @@ class Trainer:
             jloss += self.config.gan_wt * gen_loss
 
         if self.config.use_nn_timeconsistency:
+            self.temp_disc.module.unfreeze()
             for _ in range(self.config.temp_disc_steps):
                 self.temp_disc_optim.zero_grad()
                 temp_nn_loss = self.temp_nn_fn(
@@ -431,6 +430,7 @@ class Trainer:
                 temp_nn_loss.mean().backward()
                 self.temp_disc_optim.step()
 
+            self.temp_disc.module.freeze()
             temp_nn_loss = self.temp_nn_fn(renders, self.temp_disc)
             running_losses.temp_nn += temp_nn_loss.mean().item()
             jloss += self.config.temp_nn_wt * temp_nn_loss
