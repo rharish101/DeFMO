@@ -2,6 +2,7 @@
 """The main training script."""
 from __future__ import annotations
 
+import random
 import time
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
+import numpy as np
 import toml
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -564,6 +566,10 @@ def main(args: Namespace) -> None:
     config = load_config(args.config)
     train_folder = args.dataset_folder / "ShapeNetv2/ShapeBlur1000STL.hdf5"
     val_folder = args.dataset_folder / "ShapeNetv2/ShapeBlur20STL.hdf5"
+
+    torch.manual_seed(config.seed)
+    np.random.seed(config.seed)
+    random.seed(config.seed)
 
     trainer = Trainer(
         config,
