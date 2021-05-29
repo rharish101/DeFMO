@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast
 from torch.nn.utils import spectral_norm
 from torchvision.models import resnet18
 
+from config import Config
 from utils import CkptModule
 
 
@@ -33,8 +35,9 @@ class _FreezableModule(CkptModule):
 
 
 class Discriminator(_FreezableModule):
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__()
+        self.config = config
 
         model = resnet18(pretrained=True)
         layers = list(model.children())
@@ -55,13 +58,15 @@ class Discriminator(_FreezableModule):
         self.net = spectralize(net)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        noise = torch.randn_like(inputs) * 1e-3
-        return self.ckpt_run(self.net, 2, inputs + noise).flatten()
+        with autocast(enabled=self.config.mixed_precision):
+            noise = torch.randn_like(inputs) * 1e-3
+            return self.ckpt_run(self.net, 2, inputs + noise).flatten()
 
 
 class TemporalDiscriminator(_FreezableModule):
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__()
+        self.config = config
 
         model = resnet18(pretrained=True)
         layers = list(model.children())
@@ -83,4 +88,5 @@ class TemporalDiscriminator(_FreezableModule):
         self.net = spectralize(net)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.ckpt_run(self.net, 2, inputs).flatten()
+        with autocast(enabled=self.config.mixed_precision):
+            return self.ckpt_run(self.net, 2, inputs).flatten()

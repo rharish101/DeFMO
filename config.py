@@ -102,6 +102,8 @@ class Config:
 
     seed: int = 0
 
+    mixed_precision: bool = True
+
 
 def load_config(config_path: Optional[Path]) -> Config:
     """Load the hyper-param config at the given path.

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.models
+from torch.cuda.amp import autocast
 
 from config import Config
 from utils import CkptModule
@@ -9,6 +10,7 @@ from utils import CkptModule
 class RenderingCNN(CkptModule):
     def __init__(self, config: Config):
         super().__init__()
+        self.config = config
         self.net = self.get_model(config)
         self.rgba_operation = nn.Sigmoid()
 
@@ -51,28 +53,29 @@ class RenderingCNN(CkptModule):
     def forward(
         self, latent: torch.Tensor, times: torch.Tensor
     ) -> torch.Tensor:
-        renders_list = []
-        shuffled_times_list = []
+        with autocast(enabled=self.config.mixed_precision):
+            renders_list = []
+            shuffled_times_list = []
 
-        for ki in range(times.shape[0]):
-            shuffled_times_list.append(torch.randperm(times.shape[1]))
-        shuffled_times = torch.stack(shuffled_times_list, 1).contiguous().T
+            for ki in range(times.shape[0]):
+                shuffled_times_list.append(torch.randperm(times.shape[1]))
+            shuffled_times = torch.stack(shuffled_times_list, 1).contiguous().T
 
-        for ki in range(times.shape[1]):
-            t_tensor = (
-                times[range(times.shape[0]), shuffled_times[:, ki]]
-                .unsqueeze(-1)
-                .unsqueeze(-1)
-                .unsqueeze(-1)
-                .repeat(1, 1, latent.shape[2], latent.shape[3])
-            )
-            latenti = torch.cat((t_tensor, latent), 1)
-            result = self.ckpt_run(self.net, 2, latenti)
-            renders_list.append(result)
+            for ki in range(times.shape[1]):
+                t_tensor = (
+                    times[range(times.shape[0]), shuffled_times[:, ki]]
+                    .unsqueeze(-1)
+                    .unsqueeze(-1)
+                    .unsqueeze(-1)
+                    .repeat(1, 1, latent.shape[2], latent.shape[3])
+                )
+                latenti = torch.cat((t_tensor, latent), 1)
+                result = self.ckpt_run(self.net, 2, latenti)
+                renders_list.append(result)
 
-        renders = torch.stack(renders_list, 1).contiguous()
-        renders[:, :, :4] = self.rgba_operation(renders[:, :, :4])
-        for ki in range(times.shape[0]):
-            renders[ki, shuffled_times[ki, :]] = renders[ki, :].clone()
+            renders = torch.stack(renders_list, 1).contiguous()
+            renders[:, :, :4] = self.rgba_operation(renders[:, :, :4])
+            for ki in range(times.shape[0]):
+                renders[ki, shuffled_times[ki, :]] = renders[ki, :].clone()
 
-        return renders
+            return renders

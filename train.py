@@ -13,6 +13,7 @@ from typing import Optional, Tuple
 import numpy as np
 import toml
 import torch
+from torch.cuda.amp import autocast
 from torch.utils.tensorboard import SummaryWriter
 from typing_extensions import Final
 
@@ -159,14 +160,14 @@ class Trainer:
             toml.dump(vars(self.config), f)
 
     def _init_models(self, load_folder: Optional[Path]) -> None:
-        self.encoder = EncoderCNN()
+        self.encoder = EncoderCNN(self.config)
         self.rendering = RenderingCNN(self.config)
         self.loss_fn = FMOLoss(self.config)
 
         if self.config.use_gan_loss:
-            self.discriminator = Discriminator()
+            self.discriminator = Discriminator(self.config)
         if self.config.use_nn_timeconsistency:
-            self.temp_disc = TemporalDiscriminator()
+            self.temp_disc = TemporalDiscriminator(self.config)
 
         if load_folder is not None:
             self.load_weights(load_folder)
@@ -238,6 +239,10 @@ class Trainer:
                 step_size=self.config.sched_step_size,
                 gamma=0.5,
             )
+
+        self.scaler = torch.cuda.amp.GradScaler(
+            enabled=self.config.mixed_precision
+        )
 
         self.start_step = 0
         if load_folder is not None:
@@ -383,6 +388,8 @@ class Trainer:
         if self.config.use_nn_timeconsistency:
             self.temp_disc.module.freeze()
 
+        self.model_optim.zero_grad()
+
         input_batch = inputs[0].to(self.device)
         times = inputs[1].to(self.device)
         hs_frames = inputs[2].to(self.device)
@@ -394,43 +401,44 @@ class Trainer:
         hs_frames.requires_grad = True
         times_left.requires_grad = True
 
-        if self.config.use_latent_learning:
-            latent = self.encoder(input_batch[:, :6])
-            latent2 = self.encoder(input_batch[:, 6:])
-        else:
-            latent = self.encoder(input_batch)
-            latent2 = []
+        with autocast(enabled=self.config.mixed_precision):
+            if self.config.use_latent_learning:
+                latent = self.encoder(input_batch[:, :6])
+                latent2 = self.encoder(input_batch[:, 6:])
+            else:
+                latent = self.encoder(input_batch)
+                latent2 = []
 
-        renders = self.rendering(latent, torch.cat((times, times_left), 1))
+            renders = self.rendering(latent, torch.cat((times, times_left), 1))
 
-        sloss, mloss, shloss, tloss, lloss, jloss = self.loss_fn(
-            renders, hs_frames, input_batch[:, :6], (latent, latent2)
-        )
-        running_losses.supervised += sloss.mean().item()
-        running_losses.model += mloss.mean().item()
-        running_losses.sharp += shloss.mean().item()
-        running_losses.timecons += tloss.mean().item()
-        running_losses.latent += lloss.mean().item()
-
-        if self.config.use_gan_loss:
-            gen_loss, disc_loss = self.gan_loss_fn(
-                renders, hs_frames, self.discriminator
+            sloss, mloss, shloss, tloss, lloss, jloss = self.loss_fn(
+                renders, hs_frames, input_batch[:, :6], (latent, latent2)
             )
-            running_losses.gen += gen_loss.mean().item()
-            running_losses.disc += disc_loss.mean().item()
-            jloss += self.config.gan_wt * gen_loss
+            running_losses.supervised += sloss.mean().item()
+            running_losses.model += mloss.mean().item()
+            running_losses.sharp += shloss.mean().item()
+            running_losses.timecons += tloss.mean().item()
+            running_losses.latent += lloss.mean().item()
 
-        if self.config.use_nn_timeconsistency:
-            temp_nn_loss = self.temp_nn_fn(renders, self.temp_disc)
-            running_losses.temp_nn += temp_nn_loss.mean().item()
-            jloss += self.config.temp_nn_wt * temp_nn_loss
+            if self.config.use_gan_loss:
+                gen_loss, disc_loss = self.gan_loss_fn(
+                    renders, hs_frames, self.discriminator
+                )
+                running_losses.gen += gen_loss.mean().item()
+                running_losses.disc += disc_loss.mean().item()
+                jloss += self.config.gan_wt * gen_loss
 
-        jloss = jloss.mean()
-        running_losses.joint += jloss.item()
+            if self.config.use_nn_timeconsistency:
+                temp_nn_loss = self.temp_nn_fn(renders, self.temp_disc)
+                running_losses.temp_nn += temp_nn_loss.mean().item()
+                jloss += self.config.temp_nn_wt * temp_nn_loss
 
-        self.model_optim.zero_grad()
-        jloss.backward()
-        self.model_optim.step()
+            jloss = jloss.mean()
+            running_losses.joint += jloss.item()
+
+        self.scaler.scale(jloss).backward()
+        self.scaler.step(self.model_optim)
+        self.scaler.update()
 
         # Needed for gradient checkpointing
         outputs = renders.detach()
@@ -440,19 +448,25 @@ class Trainer:
             self.discriminator.module.unfreeze()
             for _ in range(self.config.disc_steps):
                 self.disc_optim.zero_grad()
-                disc_loss = self.gan_loss_fn(
-                    outputs, hs_frames, self.discriminator
-                )[1]
-                disc_loss.mean().backward()
-                self.disc_optim.step()
+                with autocast(enabled=self.config.mixed_precision):
+                    disc_loss = self.gan_loss_fn(
+                        outputs, hs_frames, self.discriminator
+                    )[1].mean()
+                self.scaler.scale(disc_loss).backward()
+                self.scaler.step(self.disc_optim)
+                self.scaler.update()
 
         if self.config.use_nn_timeconsistency:
             self.temp_disc.module.unfreeze()
             for _ in range(self.config.temp_disc_steps):
                 self.temp_disc_optim.zero_grad()
-                temp_nn_loss = self.temp_nn_fn(outputs, self.temp_disc)
-                temp_nn_loss.mean().backward()
-                self.temp_disc_optim.step()
+                with autocast(enabled=self.config.mixed_precision):
+                    temp_nn_loss = self.temp_nn_fn(
+                        outputs, self.temp_disc
+                    ).mean()
+                self.scaler.scale(temp_nn_loss).backward()
+                self.scaler.step(self.temp_disc_optim)
+                self.scaler.update()
 
         return running_losses
 

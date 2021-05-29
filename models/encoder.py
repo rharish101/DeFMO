@@ -1,13 +1,16 @@
 import torch.nn as nn
 import torchvision.models
 from torch import Tensor
+from torch.cuda.amp import autocast
 
+from config import Config
 from utils import CkptModule
 
 
 class EncoderCNN(CkptModule):
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__()
+        self.config = config
 
         model = torchvision.models.resnet18(pretrained=True)
         layers = list(model.children())
@@ -21,4 +24,5 @@ class EncoderCNN(CkptModule):
         self.net = nn.Sequential(layer_0, *layers[1:3], *layers[4:8])
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return self.ckpt_run(self.net, 2, inputs)
+        with autocast(enabled=self.config.mixed_precision):
+            return self.ckpt_run(self.net, 2, inputs)
