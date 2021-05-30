@@ -342,7 +342,14 @@ class Trainer:
                 if epoch == start_epoch and it < skip_steps:
                     continue
 
-                running_losses = self._train_step(inputs, running_losses)
+                renders, running_losses = self._train_step(
+                    inputs, running_losses
+                )
+                if self.config.use_gan_loss:
+                    self._train_step_disc(renders, inputs[2])
+                if self.config.use_nn_timeconsistency:
+                    self._train_step_temp_disc(renders)
+
                 global_step += 1
 
                 if global_step % log_steps == 0:
@@ -380,7 +387,7 @@ class Trainer:
         self,
         inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         running_losses: _Losses,
-    ) -> _Losses:
+    ) -> Tuple[torch.Tensor, _Losses]:
         self.encoder.train()
         self.rendering.train()
         if self.config.use_gan_loss:
@@ -398,7 +405,6 @@ class Trainer:
         # Needed for gradient checkpointing
         input_batch.requires_grad = True
         times.requires_grad = True
-        hs_frames.requires_grad = True
         times_left.requires_grad = True
 
         with autocast(enabled=self.config.mixed_precision):
@@ -440,35 +446,50 @@ class Trainer:
         self.scaler.step(self.model_optim)
         self.scaler.update()
 
-        # Needed for gradient checkpointing
+        return renders, running_losses
+
+    def _train_step_disc(
+        self, renders: torch.Tensor, hs_frames: torch.Tensor
+    ) -> None:
+        """Train the GAN discriminator."""
         outputs = renders.detach()
+        hs_frames = hs_frames.to(self.device)
+
+        # Needed for gradient checkpointing
+        outputs.requires_grad = True
+        hs_frames.requires_grad = True
+
+        self.discriminator.module.unfreeze()
+
+        for _ in range(self.config.disc_steps):
+            self.disc_optim.zero_grad()
+
+            with autocast(enabled=self.config.mixed_precision):
+                disc_loss = self.gan_loss_fn(
+                    outputs, hs_frames, self.discriminator
+                )[1].mean()
+
+            self.scaler.scale(disc_loss).backward()
+            self.scaler.step(self.disc_optim)
+            self.scaler.update()
+
+    def _train_step_temp_disc(self, renders: torch.Tensor) -> None:
+        """Train the temporal discriminator."""
+        outputs = renders.detach()
+        # Needed for gradient checkpointing
         outputs.requires_grad = True
 
-        if self.config.use_gan_loss:
-            self.discriminator.module.unfreeze()
-            for _ in range(self.config.disc_steps):
-                self.disc_optim.zero_grad()
-                with autocast(enabled=self.config.mixed_precision):
-                    disc_loss = self.gan_loss_fn(
-                        outputs, hs_frames, self.discriminator
-                    )[1].mean()
-                self.scaler.scale(disc_loss).backward()
-                self.scaler.step(self.disc_optim)
-                self.scaler.update()
+        self.temp_disc.module.unfreeze()
 
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc.module.unfreeze()
-            for _ in range(self.config.temp_disc_steps):
-                self.temp_disc_optim.zero_grad()
-                with autocast(enabled=self.config.mixed_precision):
-                    temp_nn_loss = self.temp_nn_fn(
-                        outputs, self.temp_disc
-                    ).mean()
-                self.scaler.scale(temp_nn_loss).backward()
-                self.scaler.step(self.temp_disc_optim)
-                self.scaler.update()
+        for _ in range(self.config.temp_disc_steps):
+            self.temp_disc_optim.zero_grad()
 
-        return running_losses
+            with autocast(enabled=self.config.mixed_precision):
+                temp_nn_loss = self.temp_nn_fn(outputs, self.temp_disc).mean()
+
+            self.scaler.scale(temp_nn_loss).backward()
+            self.scaler.step(self.temp_disc_optim)
+            self.scaler.update()
 
     def save_logs(
         self,
