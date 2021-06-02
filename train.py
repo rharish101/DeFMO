@@ -585,11 +585,12 @@ class Trainer:
                 times.to(self.device),
                 hs_frames.to(self.device),
             )
-            latent = self.encoder(input_batch)
-            renders = self.rendering(latent, times)[:, :, :4]
+            with autocast(enabled=self.config.mixed_precision):
+                latent = self.encoder(input_batch)
+                renders = self.rendering(latent, times)[:, :, :4]
+                val_loss1 = fmo_loss(renders, hs_frames)
+                val_loss2 = fmo_loss(renders, torch.flip(hs_frames, [1]))
 
-            val_loss1 = fmo_loss(renders, hs_frames)
-            val_loss2 = fmo_loss(renders, torch.flip(hs_frames, [1]))
             losses = torch.cat(
                 (val_loss1.unsqueeze(0), val_loss2.unsqueeze(0)), 0
             )
