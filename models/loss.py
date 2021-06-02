@@ -282,9 +282,8 @@ def mask_sharp_loss_batchsum(renders: torch.Tensor) -> torch.Tensor:
     return torch.mean(loss, [2, 3]).sum(1)
 
 
-def mask_sharp_loss_entropy_batchsum(
-    renders: torch.Tensor, eps: float = 1e-12
-) -> torch.Tensor:
+def mask_sharp_loss_entropy_batchsum(renders: torch.Tensor) -> torch.Tensor:
+    eps = torch.finfo(renders.dtype).eps
     posr = renders[:, :, 3]
     logp = torch.log2(posr + eps)
     negr = 1 - posr
