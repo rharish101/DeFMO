@@ -1,4 +1,3 @@
-import random
 from typing import Optional
 
 import torch
@@ -141,37 +140,48 @@ class TemporalNNLoss(nn.Module):
     def __init__(self, config: Config, reduction: str = "none"):
         super().__init__()
         self.config = config
-        self.loss_fn = nn.BCEWithLogitsLoss(reduction=reduction)
+        self._log_softmax_fn = nn.LogSoftmax(dim=1)
 
     def forward(
         self, renders: torch.Tensor, discriminator: nn.Module
     ) -> torch.Tensor:
-        renders = renders[:, : self.config.fmo_train_steps, :4]
+        renders = renders[:, : self.config.fmo_train_steps]  # BxTxCxHxW
 
-        loss = 0.0
+        latents_list = [
+            discriminator(renders[:, frame_num])
+            for frame_num in range(renders.shape[1])
+        ]
+        latents = torch.stack(latents_list, 1)  # BxTxD
 
-        for frame_num in range(self.config.fmo_train_steps - 1):
-            # Offset from the current index
-            offset = random.choice(range(2, self.config.fmo_train_steps))
-            choice = (frame_num + offset) % self.config.fmo_train_steps
+        left = latents.unsqueeze(-1)  # BxTxDx1
+        right = left.permute(0, 3, 2, 1)  # Bx1xDxT
+        similarity = nn.functional.cosine_similarity(
+            left, right, dim=-2, eps=torch.finfo(left.dtype).eps
+        )  # BxTxT
 
-            correct = torch.cat(
-                (renders[:, frame_num], renders[:, frame_num + 1]), 1
-            )
-            incorrect = torch.cat(
-                (renders[:, frame_num], renders[:, choice]), 1
-            )
+        # Mask out the self values
+        mask = torch.eye(
+            self.config.fmo_train_steps, device=similarity.device
+        ).bool()
+        mask_nd = mask.unsqueeze(0).tile(similarity.shape[0], 1, 1)
+        neg_inf = float("-inf") * torch.ones_like(similarity)
+        similarity = torch.where(mask_nd, neg_inf, similarity)
 
-            correct_out = discriminator(correct)
-            incorrect_out = discriminator(incorrect)
-            loss += self.loss_fn(
-                incorrect_out, torch.zeros_like(incorrect_out)
-            )
-            loss += self.loss_fn(correct_out, torch.ones_like(correct_out))
+        log_softmax = self._log_softmax_fn(
+            similarity / self.config.temp_nn_temperature
+        )
 
-        loss /= self.config.fmo_train_steps - 1
-
-        return loss
+        # All positive pairs are (i, i+1)
+        # - x - - - -
+        # - - x - - -
+        # - - - x - -
+        # - - - - x -
+        # - - - - - x
+        # - - - - - -
+        positive_pairs = torch.diagonal(
+            log_softmax, offset=1, dim1=-2, dim2=-1
+        )  # Bx(T-1)
+        return -positive_pairs.mean(dim=-1)  # B dimensional vector
 
 
 def oflow_loss(renders: torch.Tensor) -> torch.Tensor:

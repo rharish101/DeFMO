@@ -53,7 +53,6 @@ class Trainer:
     ENC_PREFIX: Final = "encoder"
     RENDER_PREFIX: Final = "rendering"
     DISC_PREFIX: Final = "discriminator"
-    TEMP_DISC_PREFIX: Final = "temp_disc"
     BEST_SUFFIX: Final = "_best"
 
     # Used when saving training state
@@ -61,7 +60,6 @@ class Trainer:
     GLOBAL_STEP_KEY: Final = "global_step"
     MODEL_OPT_KEY: Final = "model_optim"
     DISC_OPT_KEY: Final = "disc_optim"
-    TEMP_DISC_OPT_KEY: Final = "temp_disc_optim"
 
     def __init__(
         self,
@@ -230,15 +228,6 @@ class Trainer:
                 step_size=self.config.sched_step_size,
                 gamma=0.5,
             )
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc_optim = torch.optim.Adam(
-                self.temp_disc.parameters(), lr=self.config.temp_disc_lr
-            )
-            self.temp_disc_sched = torch.optim.lr_scheduler.StepLR(
-                self.temp_disc_optim,
-                step_size=self.config.sched_step_size,
-                gamma=0.5,
-            )
 
         self.scaler = torch.cuda.amp.GradScaler(
             enabled=self.config.mixed_precision
@@ -264,11 +253,6 @@ class Trainer:
                 torch.load(load_folder / f"{self.DISC_PREFIX}.pt")
             )
 
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc.load_state_dict(
-                torch.load(load_folder / f"{self.TEMP_DISC_PREFIX}.pt")
-            )
-
     def load_state(self, load_folder: Path) -> None:
         """Load training state from a previous checkpoint."""
         load_folder = load_folder.expanduser()
@@ -278,8 +262,6 @@ class Trainer:
         self.model_optim.load_state_dict(state[self.MODEL_OPT_KEY])
         if self.config.use_gan_loss:
             self.disc_optim.load_state_dict(state[self.DISC_OPT_KEY])
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc_optim.load_state_dict(state[self.TEMP_DISC_OPT_KEY])
 
     def save_weights(self, save_best: bool = False) -> None:
         """Save weights to disk."""
@@ -297,11 +279,6 @@ class Trainer:
                 self.discriminator.module.state_dict(),
                 self.save_folder / f"{self.DISC_PREFIX}{suffix}",
             )
-        if self.config.use_nn_timeconsistency:
-            torch.save(
-                self.temp_disc.module.state_dict(),
-                self.save_folder / f"{self.TEMP_DISC_PREFIX}{suffix}",
-            )
 
     def save_state(self, global_step: int) -> None:
         """Save training state to disk."""
@@ -313,8 +290,6 @@ class Trainer:
         }
         if self.config.use_gan_loss:
             state[self.DISC_OPT_KEY] = self.disc_optim.state_dict()
-        if self.config.use_nn_timeconsistency:
-            state[self.TEMP_DISC_OPT_KEY] = self.temp_disc_optim.state_dict()
 
         torch.save(state, self.save_folder / f"{self.STATE_PREFIX}.pt")
 
@@ -328,8 +303,6 @@ class Trainer:
             self.model_sched.step()
             if self.config.use_gan_loss:
                 self.disc_sched.step()
-            if self.config.use_nn_timeconsistency:
-                self.temp_disc_sched.step()
 
         best_val_loss = float("inf")
         running_losses = _Losses()
@@ -347,8 +320,6 @@ class Trainer:
                 )
                 if self.config.use_gan_loss:
                     self._train_step_disc(renders, inputs[2])
-                if self.config.use_nn_timeconsistency:
-                    self._train_step_temp_disc(renders)
 
                 global_step += 1
 
@@ -376,8 +347,6 @@ class Trainer:
             self.model_sched.step()
             if self.config.use_gan_loss:
                 self.disc_sched.step()
-            if self.config.use_nn_timeconsistency:
-                self.temp_disc_sched.step()
 
         torch.cuda.empty_cache()
         self.save_state(global_step)
@@ -392,8 +361,6 @@ class Trainer:
         self.rendering.train()
         if self.config.use_gan_loss:
             self.discriminator.module.freeze()
-        if self.config.use_nn_timeconsistency:
-            self.temp_disc.module.freeze()
 
         self.model_optim.zero_grad()
 
@@ -435,7 +402,10 @@ class Trainer:
                 jloss += self.config.gan_wt * gen_loss
 
             if self.config.use_nn_timeconsistency:
-                temp_nn_loss = self.temp_nn_fn(renders, self.temp_disc)
+                mask = renders[:, :, 3:4]  # for broadcasting
+                fg = renders[:, :, :3] * mask
+                bg = input_batch[:, 3:6].unsqueeze(1) * (1 - mask)
+                temp_nn_loss = self.temp_nn_fn(fg + bg, self.temp_disc)
                 running_losses.temp_nn += temp_nn_loss.mean().item()
                 jloss += self.config.temp_nn_wt * temp_nn_loss
 
@@ -471,24 +441,6 @@ class Trainer:
 
             self.scaler.scale(disc_loss).backward()
             self.scaler.step(self.disc_optim)
-            self.scaler.update()
-
-    def _train_step_temp_disc(self, renders: torch.Tensor) -> None:
-        """Train the temporal discriminator."""
-        outputs = renders.detach()
-        # Needed for gradient checkpointing
-        outputs.requires_grad = True
-
-        self.temp_disc.module.unfreeze()
-
-        for _ in range(self.config.temp_disc_steps):
-            self.temp_disc_optim.zero_grad()
-
-            with autocast(enabled=self.config.mixed_precision):
-                temp_nn_loss = self.temp_nn_fn(outputs, self.temp_disc).mean()
-
-            self.scaler.scale(temp_nn_loss).backward()
-            self.scaler.step(self.temp_disc_optim)
             self.scaler.update()
 
     def save_logs(

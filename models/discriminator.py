@@ -70,23 +70,12 @@ class TemporalDiscriminator(_FreezableModule):
 
         model = resnet18(pretrained=True)
         layers = list(model.children())
+        self.net = nn.Sequential(*layers[:-1], nn.Flatten())
 
-        pretrained_weights = layers[0].weight
-        layers[0] = nn.Conv2d(
-            8,
-            64,
-            kernel_size=(7, 7),
-            stride=(2, 2),
-            padding=(3, 3),
-            bias=False,
-        )
-        layers[0].weight.data[:, :3, :, :] = nn.Parameter(pretrained_weights)
-        layers[0].weight.data[:, 4:7, :, :] = nn.Parameter(pretrained_weights)
-
-        classify = nn.Linear(512, 1)
-        net = nn.Sequential(*layers[:-1], nn.Flatten(), classify)
-        self.net = spectralize(net)
+        # Freeze the pre-trained model
+        for param in self.net.parameters():
+            param.requires_grad = False
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         with autocast(enabled=self.config.mixed_precision):
-            return self.ckpt_run(self.net, 2, inputs).flatten()
+            return self.ckpt_run(self.net, 2, inputs)

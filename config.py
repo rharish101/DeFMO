@@ -98,7 +98,7 @@ class Config:
     gan_wt: float = 1.0
     temp_nn_wt: float = 0.05
     disc_steps: int = 1
-    temp_disc_steps: int = 2
+    temp_nn_temperature: float = 1.0
 
     seed: int = 0
 
