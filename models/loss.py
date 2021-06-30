@@ -257,8 +257,9 @@ def batch_loss(
     YpM: torch.Tensor, YM: torch.Tensor, YMb: torch.Tensor
 ) -> torch.Tensor:
     losses = nn.L1Loss(reduction="none")(YpM * YMb, YM * YMb)
+    eps = torch.finfo(YMb.dtype).eps
     if len(losses.shape) > 4:
-        bloss = losses.sum([1, 2, 3, 4]) / YMb.sum([1, 2, 3, 4])
+        bloss = losses.sum([1, 2, 3, 4]) / (YMb.sum([1, 2, 3, 4]) + eps)
     else:
         bloss = losses.sum([1, 2, 3]) / (YMb.sum([1, 2, 3]) + 0.01)
     return bloss
