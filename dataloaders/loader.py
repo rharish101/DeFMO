@@ -28,9 +28,6 @@ class ShapeBlurDataset(torch.utils.data.Dataset):
         self.number_per_category = number_per_category
         self.do_augment = do_augment
         self.use_latent_learning = use_latent_learning
-        self.crop_fn = transforms.RandomCrop(
-            [self.config.train_res_x, self.config.train_res_y]
-        )
 
     def __len__(self) -> int:
         return len(self.render_objs) * self.number_per_category
@@ -89,8 +86,26 @@ class ShapeBlurDataset(torch.utils.data.Dataset):
             self.config.train_res_x is not None
             and self.config.train_res_y is not None
         ):
-            inputs = self.crop_fn(inputs)
-            hs_frames = self.crop_fn(hs_frames)
+            top = random.randint(
+                0, inputs.shape[-2] - 1 - self.config.train_res_y
+            )
+            left = random.randint(
+                0, inputs.shape[-1] - 1 - self.config.train_res_x
+            )
+            inputs = transforms.functional.crop(
+                inputs,
+                top,
+                left,
+                self.config.train_res_y,
+                self.config.train_res_x,
+            )
+            hs_frames = transforms.functional.crop(
+                hs_frames,
+                top,
+                left,
+                self.config.train_res_y,
+                self.config.train_res_x,
+            )
 
         return inputs, times, hs_frames, times_left
 
